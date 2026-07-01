@@ -168,6 +168,7 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
     \item Developed multi-agent AI architectures for autonomous reasoning and task execution across complex workflows
     \item Built production chatbots/voicebots handling \textbf{5,000+ monthly conversations} (Twilio, Vapi integration)
     \item Automated property insights using BigQuery + Gemini, \textbf{cutting analysis turnaround time by 40\%}
+    \item Designed and implemented agentic AI workflows using LangGraph and LangChain
 \end{itemize}
 
 \vspace{4pt}
@@ -200,7 +201,6 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
     \item Delivered LSTM-based prediction tools and OCR systems automating manual data processing for SMEs
 \end{itemize}
 
-% --- SELECTED PROJECTS ---
 \section*{Projects}
 
 \begin{itemize}[leftmargin=0pt, label={}]
@@ -220,7 +220,7 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
     Multi-agent AI report generation platform; \textbf{reduced manual analysis time by 70\%}.
 
     \item \textbf{Laila App}: FastAPI, Search Algorithms \\
-    Multilingual khutba translation API with real-time Quranic search - \textbf{relevant for GCC markets}.
+    Multilingual khutba translation API with real-time Quranic search.
 
     \item \textbf{Pen Testing Agent Platform}: PostgreSQL, FastAPI, LangChain, OpenAI \\
     Automated vulnerability assessment, reducing manual analysis cycles by 50\%.
@@ -367,6 +367,124 @@ Sincerely,\\[1.5em]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  EXTRACT PERSONAL DETAILS FROM RESUME & COVER LETTER
+# ═════════════════════════════════════════════════════════════════════════════
+
+def extract_personal_details(resume_tex: str, cover_tex: str) -> Dict[str, str]:
+    """Extract personal details from the embedded LaTeX resume and cover letter."""
+    details = {}
+
+    name_match = re.search(r"\\textbf\{([^}]+)\}", resume_tex)
+    if name_match:
+        full_name = name_match.group(1).strip()
+        parts = full_name.split()
+        details["first_name"] = parts[0] if parts else "Ibtasam"
+        details["last_name"] = " ".join(parts[1:]) if len(parts) > 1 else "Ahmad"
+    else:
+        details["first_name"] = "Ibtasam"
+        details["last_name"] = "Ahmad"
+
+    email_match = re.search(r"href\{mailto:([^}]+)\}", resume_tex)
+    details["email"] = email_match.group(1) if email_match else "shibtasam@gmail.com"
+
+    phone_match = re.search(r"(\+\d[\d\s]+)", resume_tex)
+    details["phone"] = phone_match.group(1).strip() if phone_match else "+92 315 0180953"
+
+    loc_match = re.search(r"(\+\d[\d\s]+)\s+\\hspace[^}]+\s+(\w+),\s*(\w+)", resume_tex)
+    if loc_match:
+        details["city"] = loc_match.group(2)
+        details["country"] = loc_match.group(3)
+    else:
+        details["city"] = "Lahore"
+        details["country"] = "Pakistan"
+
+    li_match = re.search(r"linkedin\.com/[^}]+", resume_tex)
+    details["linkedin"] = li_match.group(0) if li_match else "linkedin.com/in/ibtasam-ahmad"
+
+    gh_match = re.search(r"github\.com/[^}]+", resume_tex)
+    details["github"] = gh_match.group(0) if gh_match else "github.com/Ibtasam-Ahmad"
+
+    details["province"] = "Punjab"
+    details["zip_code"] = "54000"
+    details["address"] = f"{details['city']}, {details['province']}, {details['country']}"
+    details["notice_period"] = "Immediate"
+    details["relocation"] = "Immediately available for relocation"
+    details["visa_status"] = "Eligible for employer-sponsored work visa"
+
+    return details
+
+
+PERSONAL_DETAILS = extract_personal_details(BASE_RESUME_LATEX, BASE_COVER_LETTER_LATEX)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  STREAMLIT PAGE CONFIG
+# ═════════════════════════════════════════════════════════════════════════════
+
+st.set_page_config(
+    page_title="AI Resume Tailor",
+    page_icon="📄",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<style>
+    .stCode pre { position: relative; }
+    .copy-box {
+        background-color: #f0f2f6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 8px 0;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        border-left: 4px solid #1f77b4;
+    }
+    .section-header {
+        color: #1f77b4;
+        font-weight: 600;
+        font-size: 18px;
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+    .output-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin: 10px 0;
+    }
+    /* Prevent button click from causing full page reload */
+    .stDownloadButton button, .stButton button {
+        transition: all 0.2s ease;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  SESSION STATE INITIALIZATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+def init_session_state():
+    """Initialize all session state variables."""
+    defaults = {
+        "generated": False,
+        "results": {},
+        "job_title": "",
+        "job_text": "",
+        "mode": "email",
+        "generating": False,
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+init_session_state()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  GROQ API CLIENT WITH MULTI-KEY FALLBACK
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -385,21 +503,14 @@ class GroqClientManager:
 
         # Pattern 1: GROQ_API_KEY_1, GROQ_API_KEY_2, ...
         for i in range(1, 20):
-            key_name = f"GROQ_API_KEY_{i}"
-            if key_name in st.secrets:
-                possible_keys.append(st.secrets[key_name])
+            for prefix in ["GROQ_API_KEY_", "groq_api_key_"]:
+                key_name = f"{prefix}{i}"
+                if key_name in st.secrets:
+                    possible_keys.append(st.secrets[key_name])
 
-        # Pattern 2: groq_api_key_1, groq_api_key_2, ...
-        for i in range(1, 20):
-            key_name = f"groq_api_key_{i}"
-            if key_name in st.secrets:
-                possible_keys.append(st.secrets[key_name])
-
-        # Pattern 3: Single key
-        if "GROQ_API_KEY" in st.secrets:
-            possible_keys.append(st.secrets["GROQ_API_KEY"])
-        if "groq_api_key" in st.secrets:
-            possible_keys.append(st.secrets["groq_api_key"])
+        for key in ["GROQ_API_KEY", "groq_api_key"]:
+            if key in st.secrets:
+                possible_keys.append(st.secrets[key])
 
         # Pattern 4: List of keys
         if "GROQ_API_KEYS" in st.secrets:
@@ -417,29 +528,15 @@ class GroqClientManager:
                 self.keys.append(k)
 
         if not self.keys:
-            st.error("""
-❌ **No Groq API keys found!**
-
-Please add your API keys to `.streamlit/secrets.toml` like this:
-
-```toml
-GROQ_API_KEY_1 = "gsk_xxxxxxxxxxxxxxxxxxxxxxxx"
-GROQ_API_KEY_2 = "gsk_yyyyyyyyyyyyyyyyyyyyyyyy"
-GROQ_API_KEY_3 = "gsk_zzzzzzzzzzzzzzzzzzzzzzzz"
-```
-            """)
+            st.error("No Groq API keys found in secrets.toml!")
             st.stop()
 
-        st.sidebar.success(f"✅ Loaded {len(self.keys)} Groq API key(s)")
-
     def get_client(self) -> Groq:
-        """Get a Groq client using the current key."""
         if self.current_index >= len(self.keys):
-            self.current_index = 0  # Reset and try again
+            self.current_index = 0
         return Groq(api_key=self.keys[self.current_index])
 
     def rotate_key(self) -> None:
-        """Move to the next API key."""
         self.current_index = (self.current_index + 1) % len(self.keys)
 
     def call_with_fallback(
@@ -550,148 +647,143 @@ Download and install MiKTeX from https://miktex.org/download
 # ═════════════════════════════════════════════════════════════════════════════
 
 def copyable_text(label: str, text: str, key_suffix: str = "") -> None:
-    """Display text with a one-click copy button using Streamlit's native copy feature."""
+    """Display text with download button (no rerun on click)."""
     col1, col2 = st.columns([0.92, 0.08])
-
     with col1:
         st.code(text, language="text")
-
     with col2:
-        # Use st_copy_to_clipboard if available, otherwise use a download button workaround
-        try:
-            import streamlit_copy_to_clipboard as stcp
-            stcp.copy_to_clipboard(text, key=f"copy_{key_suffix}_{hash(text) & 0xFFFFFF}")
-        except ImportError:
-            # Fallback: download as text file
-            st.download_button(
-                label="📋",
-                data=text,
-                file_name=f"{label.lower().replace(' ', '_')}.txt",
-                mime="text/plain",
-                key=f"dl_{key_suffix}_{hash(text) & 0xFFFFFF}",
-                help=f"Download {label} as text file",
-            )
+        st.download_button(
+            label="📋",
+            data=text,
+            file_name=f"{label.lower().replace(' ', '_')}.txt",
+            mime="text/plain",
+            key=f"dl_{key_suffix}_{hash(text) & 0xFFFFFF}",
+            help=f"Download {label}",
+        )
 
 
 def copyable_latex(label: str, latex_code: str, key_suffix: str = "") -> None:
-    """Display LaTeX code with copy button and expander."""
-    with st.expander(f"📄 {label} — Click to view LaTeX source", expanded=False):
+    """Display LaTeX code with download button."""
+    with st.expander(f"📄 {label} — View LaTeX source", expanded=False):
         col1, col2 = st.columns([0.92, 0.08])
         with col1:
             st.code(latex_code, language="latex")
         with col2:
-            try:
-                import streamlit_copy_to_clipboard as stcp
-                stcp.copy_to_clipboard(latex_code, key=f"copy_latex_{key_suffix}_{hash(latex_code) & 0xFFFFFF}")
-            except ImportError:
-                st.download_button(
-                    label="📋",
-                    data=latex_code,
-                    file_name=f"{label.lower().replace(' ', '_')}.tex",
-                    mime="text/x-tex",
-                    key=f"dl_latex_{key_suffix}_{hash(latex_code) & 0xFFFFFF}",
-                    help=f"Download {label} LaTeX source",
-                )
+            st.download_button(
+                label="📋",
+                data=latex_code,
+                file_name=f"{label.lower().replace(' ', '_')}.tex",
+                mime="text/x-tex",
+                key=f"dl_latex_{key_suffix}_{hash(latex_code) & 0xFFFFFF}",
+                help=f"Download {label} LaTeX",
+            )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  PROMPT ENGINEERING
 # ═════════════════════════════════════════════════════════════════════════════
 
-def build_resume_tailor_prompt(base_resume: str, job_text: str, mode: str) -> str:
-    """Build the prompt for tailoring the resume."""
-    return f"""You are an expert resume writer and ATS optimization specialist.
+def build_resume_tailor_prompt(base_resume: str, job_text: str) -> str:
+    return f"""You are an elite ATS optimization specialist and resume writer for AI/ML engineering roles.
 
-TASK: Tailor the following resume to match the job description/portal text provided.
+TASK: Transform the following resume into a HIGH-IMPACT, ATS-OPTIMIZED version tailored to the job description.
 
-RULES:
-1. Keep the EXACT same LaTeX structure, document class, packages, and formatting
-2. Modify ONLY the content to highlight skills and experience most relevant to the job
-3. Add job-specific keywords naturally into the Professional Summary and bullet points
-4. Reorder projects to prioritize those most relevant to the job
-5. Adjust the Professional Summary to directly address the job requirements
-6. Keep all hyperlinks, formatting commands, and LaTeX syntax intact
-7. Do NOT add comments or explanations outside the LaTeX code
-8. Ensure the output is valid, compilable LaTeX
-
-MODE: {mode}
+OPTIMIZATION RULES (AI has FULL FREEDOM to modify):
+1. Keep the EXACT same LaTeX structure, packages, and formatting
+2. You MAY rewrite ANY content for maximum impact:
+   - Professional Summary: Rewrite to directly address the job's top 3 requirements
+   - Job titles: Adjust wording to match industry standards (e.g., "Senior AI/ML Engineer" → "Senior AI Engineer" if that's what the job calls it)
+   - Bullet points: Rewrite using STAR method (Situation, Task, Action, Result) with quantified metrics
+   - Skills: Reorder and emphasize skills mentioned in the job description
+   - Projects: Reorder to put most relevant first; rewrite descriptions to mirror job keywords
+   - Wording: Use power verbs and job-specific terminology
+3. Add job-specific keywords naturally throughout (for ATS scoring)
+4. Quantify EVERY achievement with numbers, percentages, time saved
+5. Remove or de-emphasize less relevant experience
+6. Keep all hyperlinks and LaTeX syntax intact
+7. Do NOT add comments or explanations outside LaTeX
+8. Ensure valid, compilable LaTeX output
 
 BASE RESUME (LaTeX):
 ```latex
 {base_resume}
 ```
 
-JOB TEXT:
+JOB DESCRIPTION:
 ```
 {job_text}
 ```
 
-OUTPUT: Return ONLY the complete tailored LaTeX resume code. No markdown code fences, no explanations.
+OUTPUT: Return ONLY the complete optimized LaTeX resume. No markdown fences, no explanations.
 """
 
 
-def build_cover_letter_prompt(base_cover_letter: str, job_text: str, job_title: str, mode: str) -> str:
-    """Build the prompt for tailoring the cover letter."""
-    return f"""You are an expert cover letter writer for tech professionals.
+def build_cover_letter_prompt(base_cover_letter: str, job_text: str, detected_title: str) -> str:
+    return f"""You are an elite cover letter writer for senior AI engineering positions.
 
-TASK: Tailor the following cover letter to match the job description/portal text provided.
+TASK: Transform the following cover letter into a COMPELLING, HIGH-CONVERSION application tailored to the job.
 
-RULES:
-1. Keep the EXACT same LaTeX structure, document class, packages, and formatting
-2. Replace {{JOB_TITLE}} with the actual job title extracted from the job text
-3. Customize the opening paragraph to mention the specific company and role
-4. Highlight 2-3 most relevant projects/experiences that match the job requirements
-5. Adjust technical details to align with the job's tech stack
-6. Keep all hyperlinks, formatting commands, and LaTeX syntax intact
-7. Do NOT add comments or explanations outside the LaTeX code
-8. Ensure the output is valid, compilable LaTeX
-
-MODE: {mode}
+OPTIMIZATION RULES (AI has FULL FREEDOM to modify):
+1. Keep the EXACT same LaTeX structure and formatting
+2. You MAY rewrite ANY content for maximum impact:
+   - Job title in subject line: Use the EXACT title from the job posting (detected: {detected_title}), or a variation that matches better
+   - Opening hook: Make it attention-grabbing and specific to the company/role
+   - Body paragraphs: Rewrite to directly address the top 3 job requirements with specific proof from resume
+   - Project mentions: Choose the 2-3 MOST relevant projects and describe them with job-matching keywords
+   - Technical depth: Add specific technical details that mirror the job requirements
+   - Closing: Strong call-to-action with specific next step
+3. Replace {{JOB_TITLE}} with the optimized job title
+4. Mention the specific company name if found in the job text
+5. Use power verbs and industry-specific terminology
+6. Keep all hyperlinks and LaTeX syntax intact
+7. Do NOT add comments or explanations outside LaTeX
+8. Ensure valid, compilable LaTeX output
 
 BASE COVER LETTER (LaTeX):
 ```latex
 {base_cover_letter}
 ```
 
-JOB TEXT:
+JOB DESCRIPTION:
 ```
 {job_text}
 ```
 
-EXTRACTED JOB TITLE: {job_title}
+DETECTED JOB TITLE: {detected_title}
 
-OUTPUT: Return ONLY the complete tailored LaTeX cover letter code. No markdown code fences, no explanations.
+OUTPUT: Return ONLY the complete optimized LaTeX cover letter. No markdown fences, no explanations.
 """
 
 
-def build_email_prompt(job_text: str, job_title: str) -> str:
-    """Build the prompt for generating email subject and body."""
-    return f"""You are an expert job application email writer.
+def build_email_prompt(job_text: str, detected_title: str, details: Dict[str, str]) -> str:
+    return f"""You are an elite job application email strategist.
 
-TASK: Write a professional cold email for a job application.
+APPLICANT DETAILS (extracted from resume):
+- Name: {details['first_name']} {details['last_name']}
+- Role: AI/ML Engineer
+- Experience: 4+ years
+- Email: {details['email']}
+- Phone: {details['phone']}
+- Location: {details['city']}, {details['country']}
+- LinkedIn: {details['linkedin']}
+- GitHub: {details['github']}
+- Specialties: LLM systems, RAG architectures, multi-agent systems, computer vision, LangChain/LangGraph
+- Open to: Relocation (Middle East, Schengen)
+- Availability: Immediate
 
-CONTEXT:
-- Applicant: Ibtasam Ahmad, AI/ML Engineer with 4+ years experience
-- Specialties: LLM systems, RAG architectures, multi-agent systems, LangChain/LangGraph
-- Open to relocation (Middle East, Schengen)
-- Email: shibtasam@gmail.com
-- LinkedIn: linkedin.com/in/ibtasam-ahmad
-- GitHub: github.com/Ibtasam-Ahmad
+TASK: Write a HIGH-CONVERSION cold email for the {detected_title} position.
 
-JOB TEXT:
-```
-{job_text}
-```
-
-EXTRACTED JOB TITLE: {job_title}
-
-RULES:
-1. Subject line should be concise, professional, and mention the role
-2. Email body should be 3-4 short paragraphs
-3. Mention that resume and cover letter are attached as PDFs
-4. Show enthusiasm without being overly casual
-5. Include a clear call-to-action (request for interview/call)
-6. Keep total email under 200 words
+OPTIMIZATION RULES (AI has FULL FREEDOM):
+1. Subject line: Make it irresistible — specific, urgent, benefit-driven. Examples:
+   - "Senior AI Engineer Application — 4+ Years Production RAG & Multi-Agent Systems | Ibtasam Ahmad"
+   - "Application: {detected_title} — Published AI Researcher + 60% Automation Track Record"
+   - Choose the ONE that will get the highest open rate for THIS role
+2. Body: 3-4 tight paragraphs, under 180 words
+3. MUST mention: "Please find attached my tailored resume and cover letter as PDFs."
+4. Hook: Lead with the most impressive achievement that matches THIS job
+5. Proof: One specific metric or project that directly addresses a job requirement
+6. Close: Strong CTA with specific timeframe (e.g., "Would you be open to a 15-minute call this week?")
+7. Use the EXACT personal details provided above
 
 OUTPUT FORMAT (JSON):
 {{
@@ -701,41 +793,71 @@ OUTPUT FORMAT (JSON):
 """
 
 
-def build_portal_qa_prompt(job_text: str, base_resume_text: str) -> str:
-    """Build the prompt for extracting and answering job portal questions."""
-    return f"""You are an expert job application assistant.
+def build_portal_qa_prompt(job_text: str, resume_tex: str, cover_tex: str, details: Dict[str, str]) -> str:
+    return f"""You are an elite job application strategist for Ibtasam Ahmad.
 
-TASK: Analyze the job portal page text and extract all application questions. Then provide tailored answers based on the applicant's resume.
+TASK: Analyze the job portal page text and generate OPTIMIZED answers for all form fields/questions.
 
-APPLICANT RESUME SUMMARY:
-{base_resume_text}
+APPLICANT'S FULL RESUME:
+```latex
+{resume_tex}
+```
+
+APPLICANT'S FULL COVER LETTER:
+```latex
+{cover_tex}
+```
+
+EXTRACTED PERSONAL DETAILS (use EXACTLY these):
+- Full Name: {details['first_name']} {details['last_name']}
+- Email: {details['email']}
+- Phone: {details['phone']}
+- City: {details['city']}
+- Country: {details['country']}
+- Province/State: {details['province']}
+- Zip Code: {details['zip_code']}
+- Address: {details['address']}
+- Notice Period: {details['notice_period']}
+- Relocation: {details['relocation']}
+- Visa Status: {details['visa_status']}
+- LinkedIn: {details['linkedin']}
+- GitHub: {details['github']}
+
+OPTIMIZATION RULES (AI has FULL FREEDOM to craft best answers):
+1. For personal info fields (name, email, phone, address, etc.), use ONLY the exact details extracted from the resume
+2. For "Key Skills" field: Extract and ORDER skills from the resume to MATCH the job requirements most closely. Lead with the skills mentioned in the job description.
+3. For "Current Salary" / "Expected Salary": Write "Negotiable / Will discuss" — NEVER invent numbers
+4. For open-ended questions: Craft COMPELLING, SPECIFIC answers (2-4 sentences) that:
+   - Reference ACTUAL projects from the resume
+   - Use job-specific keywords
+   - Include quantified achievements where possible
+   - Show enthusiasm and cultural fit
+5. For "Why this company/role?" questions: Connect specific job requirements to your actual experience
+6. For "GitHub/Portfolio" questions: Provide {details['github']}
+7. For "Availability": "Immediate — can join immediately"
+8. For "Notice Period": "Immediate"
+9. NEVER make up projects, numbers, or experiences not found in the resume
+10. For "LinkedIn" field: {details['linkedin']}
+11. For "Portfolio/Website" questions: Provide GitHub and LinkedIn links
+12. For "Cover Letter" text fields: Provide a concise 3-paragraph version optimized for this role
 
 JOB PORTAL PAGE TEXT:
 ```
 {job_text}
 ```
 
-RULES:
-1. Extract ALL questions, fields, and prompts from the portal text
-2. This includes: text questions, dropdown options, checkbox items, salary expectations, start date, etc.
-3. Provide concise, professional answers (2-4 sentences each)
-4. Tailor each answer to highlight relevant experience from the resume
-5. For salary questions, give a reasonable range based on the role and region
-6. For "Why this company?" questions, research-style answers based on the job text
-7. For "Availability" questions, state "Immediately available for relocation"
-
 OUTPUT FORMAT (JSON):
 {{
     "questions": [
         {{
             "question": "exact question text from portal",
-            "answer": "tailored answer"
+            "answer": "optimized answer using ONLY resume details, crafted for maximum impact"
         }},
         ...
     ]
 }}
 
-If no explicit questions are found, generate common questions based on the job description and provide answers.
+If no explicit questions found, generate the most common application questions based on the job description and provide optimized answers.
 """
 
 
@@ -744,30 +866,20 @@ If no explicit questions are found, generate common questions based on the job d
 # ═════════════════════════════════════════════════════════════════════════════
 
 def extract_job_title(job_text: str) -> str:
-    """Extract job title from job text using simple heuristics."""
     lines = job_text.strip().split("\n")
-    # Try first non-empty line
-    for line in lines[:10]:
+    for line in lines[:15]:
         line = line.strip()
         if line and len(line) < 100:
-            # Common patterns
-            if any(kw in line.lower() for kw in ["engineer", "developer", "scientist", "manager", "lead", "architect", "analyst", "consultant", "specialist"]):
+            if any(kw in line.lower() for kw in ["engineer", "developer", "scientist", "manager", "lead", "architect", "analyst", "consultant", "specialist", "director"]):
                 return line
-    # Fallback: use first line
     return lines[0].strip() if lines else "the Position"
 
 
 def clean_latex_output(raw: str) -> str:
-    """Clean LLM output to extract pure LaTeX code."""
-    # Remove markdown code fences
     raw = re.sub(r"```latex\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"```\s*$", "", raw)
-    raw = re.sub(r"^```\s*", "", raw)
-    # Remove any leading/trailing whitespace
     raw = raw.strip()
-    # Ensure it starts with \documentclass
     if "\\documentclass" not in raw:
-        # Try to find it
         match = re.search(r"(\\documentclass.*)", raw, re.DOTALL)
         if match:
             raw = match.group(1)
@@ -775,16 +887,209 @@ def clean_latex_output(raw: str) -> str:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+#  GENERATION FUNCTION (called once, results stored in session_state)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def generate_all(job_text: str, mode_value: str, model: str, temperature: float):
+    """Generate all materials and store in session_state."""
+    st.session_state.generating = True
+    st.session_state.job_text = job_text
+    st.session_state.mode = mode_value
+
+    try:
+        groq_manager = GroqClientManager()
+    except Exception as e:
+        st.error(f"Failed to initialize Groq client: {e}")
+        st.session_state.generating = False
+        return
+
+    job_title = extract_job_title(job_text)
+    st.session_state.job_title = job_title
+
+    results = {}
+
+    # Step 1: Tailor Resume
+    try:
+        resume_prompt = build_resume_tailor_prompt(BASE_RESUME_LATEX, job_text)
+        tailored_resume_raw = groq_manager.call_with_fallback(
+            messages=[{"role": "user", "content": resume_prompt}],
+            model=model,
+            temperature=temperature,
+            max_tokens=8000,
+        )
+        results["tailored_resume_latex"] = clean_latex_output(tailored_resume_raw)
+    except Exception as e:
+        st.error(f"❌ Resume tailoring failed: {e}")
+        st.session_state.generating = False
+        return
+
+    # Step 2: Tailor Cover Letter
+    try:
+        cover_prompt = build_cover_letter_prompt(BASE_COVER_LETTER_LATEX, job_text, job_title)
+        tailored_cover_raw = groq_manager.call_with_fallback(
+            messages=[{"role": "user", "content": cover_prompt}],
+            model=model,
+            temperature=temperature,
+            max_tokens=8000,
+        )
+        results["tailored_cover_latex"] = clean_latex_output(tailored_cover_raw)
+    except Exception as e:
+        st.error(f"❌ Cover letter generation failed: {e}")
+        st.session_state.generating = False
+        return
+
+    # Step 3: Mode-specific content
+    if mode_value == "email":
+        try:
+            email_prompt = build_email_prompt(job_text, job_title, PERSONAL_DETAILS)
+            email_raw = groq_manager.call_with_fallback(
+                messages=[{"role": "user", "content": email_prompt}],
+                model=model,
+                temperature=temperature,
+                max_tokens=2000,
+                response_format={"type": "json_object"},
+            )
+            email_data = json.loads(email_raw)
+            results["email_subject"] = email_data.get("email_subject", "")
+            results["email_body"] = email_data.get("email_body", "")
+        except Exception as e:
+            st.error(f"❌ Email generation failed: {e}")
+            results["email_subject"] = f"Application for {job_title} — Ibtasam Ahmad"
+            results["email_body"] = "Email generation failed. Please compose manually."
+    else:
+        try:
+            qa_prompt = build_portal_qa_prompt(
+                job_text, BASE_RESUME_LATEX, BASE_COVER_LETTER_LATEX, PERSONAL_DETAILS
+            )
+            qa_raw = groq_manager.call_with_fallback(
+                messages=[{"role": "user", "content": qa_prompt}],
+                model=model,
+                temperature=0.2,
+                max_tokens=6000,
+                response_format={"type": "json_object"},
+            )
+            qa_data = json.loads(qa_raw)
+            results["questions_answers"] = qa_data.get("questions", [])
+        except Exception as e:
+            st.error(f"❌ Q&A generation failed: {e}")
+            results["questions_answers"] = []
+
+    # Step 4: Compile PDFs
+    results["resume_pdf"] = compile_latex_to_pdf(results["tailored_resume_latex"], "tailored_resume")
+    results["cover_pdf"] = compile_latex_to_pdf(results["tailored_cover_latex"], "tailored_cover_letter")
+
+    # Store results
+    st.session_state.results = results
+    st.session_state.generated = True
+    st.session_state.generating = False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  DISPLAY RESULTS (no generation here, just rendering from session_state)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def display_results():
+    """Display generated materials from session_state — NO rerun on interactions."""
+    results = st.session_state.results
+    job_title = st.session_state.job_title
+    mode_value = st.session_state.mode
+
+    st.markdown("---")
+    st.markdown("## 📦 Generated Materials")
+    st.success(f"✅ Job Title Detected: **{job_title}**")
+
+    # PDF Downloads Row
+    pdf_col1, pdf_col2, pdf_col3 = st.columns(3)
+
+    with pdf_col1:
+        st.markdown("<div class='output-card'>", unsafe_allow_html=True)
+        st.markdown("### 📄 Tailored Resume")
+        if results.get("resume_pdf"):
+            st.download_button(
+                label="⬇️ Download Resume PDF",
+                data=results["resume_pdf"],
+                file_name=f"Ibtasam_Ahmad_Resume_{job_title.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                key="dl_resume_pdf",
+            )
+        else:
+            st.warning("PDF compilation failed. Use LaTeX source below.")
+        copyable_latex("Resume LaTeX", results["tailored_resume_latex"], "resume")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with pdf_col2:
+        st.markdown("<div class='output-card'>", unsafe_allow_html=True)
+        st.markdown("### 📄 Cover Letter")
+        if results.get("cover_pdf"):
+            st.download_button(
+                label="⬇️ Download Cover Letter PDF",
+                data=results["cover_pdf"],
+                file_name=f"Ibtasam_Ahmad_Cover_Letter_{job_title.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                key="dl_cover_pdf",
+            )
+        else:
+            st.warning("PDF compilation failed. Use LaTeX source below.")
+        copyable_latex("Cover Letter LaTeX", results["tailored_cover_latex"], "cover")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with pdf_col3:
+        st.markdown("<div class='output-card'>", unsafe_allow_html=True)
+        if mode_value == "email":
+            st.markdown("### 📧 Email")
+            st.markdown("**Subject:**")
+            copyable_text("Email Subject", results["email_subject"], "email_subj")
+            st.markdown("**Body:**")
+            copyable_text("Email Body", results["email_body"], "email_body")
+        else:
+            st.markdown("### 🌐 Portal Q&A")
+            st.info(f"Found {len(results.get('questions_answers', []))} questions")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Email Mode: Full display
+    if mode_value == "email":
+        st.markdown("---")
+        st.markdown("## 📧 Complete Email")
+        with st.container():
+            st.markdown("<div class='output-card'>", unsafe_allow_html=True)
+            st.markdown("#### 📋 Email Subject")
+            copyable_text("Subject", results["email_subject"], "subj_full")
+            st.markdown("#### 📋 Email Body")
+            copyable_text("Body", results["email_body"], "body_full")
+            full_email = f"Subject: {results['email_subject']}\n\n{results['email_body']}"
+            st.markdown("#### 📋 Full Email (Subject + Body)")
+            copyable_text("Full Email", full_email, "full_email")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # Portal Mode: Q&A display
+    else:
+        st.markdown("---")
+        st.markdown("## 🌐 Job Portal Questions & Answers")
+
+        if results.get("questions_answers"):
+            for i, qa in enumerate(results["questions_answers"]):
+                with st.container():
+                    st.markdown("<div class='output-card'>", unsafe_allow_html=True)
+                    q_text = qa.get('question', 'N/A')
+                    a_text = qa.get('answer', 'N/A')
+                    st.markdown(f"**Q{i+1}:** {q_text}")
+                    copyable_text(f"Answer {i+1}", a_text, f"ans_{i}")
+                    st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.warning("No questions detected. Try pasting more complete portal text.")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 #  MAIN APPLICATION
 # ═════════════════════════════════════════════════════════════════════════════
 
 def main():
-    # ── Sidebar ──────────────────────────────────────────────────────────────
     with st.sidebar:
         st.title("⚙️ Settings")
         st.markdown("---")
 
-        # Model selection
         model = st.selectbox(
             "Groq Model",
             [
@@ -795,20 +1100,19 @@ def main():
                 "gemma2-9b-it",
             ],
             index=0,
-            help="Select the LLM model to use for generation",
         )
 
         temperature = st.slider(
             "Temperature",
             min_value=0.0,
             max_value=1.0,
-            value=0.3,
+            value=0.2,
             step=0.1,
-            help="Lower = more factual/conservative, Higher = more creative",
+            help="Lower = more factual, Higher = more creative",
         )
 
         st.markdown("---")
-        st.markdown("### 📋 Instructions")
+        st.markdown("### 📋 How to Use")
         st.markdown("""
 1. Select **Email** or **Job Portal** mode
 2. Paste the job description or full portal page text
@@ -817,263 +1121,65 @@ def main():
         """)
 
         st.markdown("---")
-        st.markdown("### 🔑 API Keys")
-        # Initialize manager to show key count
-        if "groq_manager" not in st.session_state:
-            try:
-                st.session_state.groq_manager = GroqClientManager()
-            except:
-                pass
+        st.markdown("### 👤 Detected Profile")
+        st.markdown(f"**Name:** {PERSONAL_DETAILS['first_name']} {PERSONAL_DETAILS['last_name']}")
+        st.markdown(f"**Email:** {PERSONAL_DETAILS['email']}")
+        st.markdown(f"**Phone:** {PERSONAL_DETAILS['phone']}")
+        st.markdown(f"**Location:** {PERSONAL_DETAILS['city']}, {PERSONAL_DETAILS['country']}")
 
-    # ── Header ───────────────────────────────────────────────────────────────
     st.title("📄 AI Resume Tailor & Application Assistant")
     st.markdown("Tailor your resume, generate cover letters, and craft perfect job applications with AI.")
     st.markdown("---")
 
-    # ── Mode Selection ───────────────────────────────────────────────────────
+    # Mode Selection
     mode = st.radio(
         "Select Application Mode:",
         ["📧 Email Application", "🌐 Job Portal Application"],
         horizontal=True,
-        help="Email mode generates email subject/body. Portal mode extracts and answers portal questions.",
+        index=0 if st.session_state.mode == "email" else 1,
     )
     mode_value = "email" if "Email" in mode else "portal"
 
-    # ── Job Text Input ───────────────────────────────────────────────────────
+    # Job Text Input
     st.markdown("### 📝 Paste Job Text")
     job_text = st.text_area(
         label="Job Description or Portal Page Text",
-        placeholder="Paste the complete job description here...\\n\\nFor Job Portal mode, paste the ENTIRE page text including all questions, fields, and requirements.",
+        placeholder="Paste the complete job description here...\n\nFor Job Portal mode, paste the ENTIRE page text including all questions, fields, and requirements.",
         height=300,
-        help="For best results, include the full job description with requirements, responsibilities, and company info.",
+        value=st.session_state.job_text,
     )
 
-    # ── Generate Button ──────────────────────────────────────────────────────
+    # Generate Button
     generate_col, _ = st.columns([0.2, 0.8])
     with generate_col:
-        generate_clicked = st.button("✨ Generate Application Materials", type="primary", use_container_width=True)
+        generate_clicked = st.button(
+            "✨ Generate Application Materials",
+            type="primary",
+            use_container_width=True,
+            disabled=st.session_state.generating,
+        )
 
-    # ── Processing ─────────────────────────────────────────────────────────
+    # Handle generation
     if generate_clicked:
         if not job_text.strip():
             st.error("❌ Please paste the job text first!")
             st.stop()
 
-        # Initialize Groq manager
-        try:
-            groq_manager = GroqClientManager()
-        except Exception as e:
-            st.error(f"Failed to initialize Groq client: {e}")
-            st.stop()
+        # Show spinner during generation
+        with st.spinner("🚀 Generating all materials... This may take 30-60 seconds."):
+            generate_all(job_text, mode_value, model, temperature)
+        st.rerun()
 
-        # Extract job title
-        job_title = extract_job_title(job_text)
-        st.info(f"📌 Detected Job Title: **{job_title}**")
+    # Show generating state
+    if st.session_state.generating:
+        st.info("⏳ Generating... Please wait.")
 
-        # Create progress containers
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+    # Display results if generated
+    if st.session_state.generated and not st.session_state.generating:
+        display_results()
 
-        results = {}
-
-        # ── Step 1: Tailor Resume ──────────────────────────────────────────
-        status_text.text("📝 Step 1/4: Tailoring resume to job description...")
-        progress_bar.progress(15)
-
-        try:
-            resume_prompt = build_resume_tailor_prompt(BASE_RESUME_LATEX, job_text, mode_value)
-            tailored_resume_raw = groq_manager.call_with_fallback(
-                messages=[{"role": "user", "content": resume_prompt}],
-                model=model,
-                temperature=temperature,
-                max_tokens=8000,
-            )
-            tailored_resume = clean_latex_output(tailored_resume_raw)
-            results["tailored_resume_latex"] = tailored_resume
-        except Exception as e:
-            st.error(f"❌ Resume tailoring failed: {e}")
-            st.stop()
-
-        # ── Step 2: Tailor Cover Letter ────────────────────────────────────
-        status_text.text("📝 Step 2/4: Generating tailored cover letter...")
-        progress_bar.progress(35)
-
-        try:
-            cover_prompt = build_cover_letter_prompt(BASE_COVER_LETTER_LATEX, job_text, job_title, mode_value)
-            tailored_cover_raw = groq_manager.call_with_fallback(
-                messages=[{"role": "user", "content": cover_prompt}],
-                model=model,
-                temperature=temperature,
-                max_tokens=8000,
-            )
-            tailored_cover = clean_latex_output(tailored_cover_raw)
-            results["tailored_cover_latex"] = tailored_cover
-        except Exception as e:
-            st.error(f"❌ Cover letter generation failed: {e}")
-            st.stop()
-
-        # ── Step 3: Mode-specific content ──────────────────────────────────
-        if mode_value == "email":
-            status_text.text("📧 Step 3/4: Generating email subject and body...")
-            progress_bar.progress(55)
-
-            try:
-                email_prompt = build_email_prompt(job_text, job_title)
-                email_raw = groq_manager.call_with_fallback(
-                    messages=[{"role": "user", "content": email_prompt}],
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=2000,
-                    response_format={"type": "json_object"},
-                )
-                email_data = json.loads(email_raw)
-                results["email_subject"] = email_data.get("email_subject", "")
-                results["email_body"] = email_data.get("email_body", "")
-            except Exception as e:
-                st.error(f"❌ Email generation failed: {e}")
-                results["email_subject"] = f"Application for {job_title} — Ibtasam Ahmad"
-                results["email_body"] = "Email generation failed. Please compose manually."
-
-        else:  # portal mode
-            status_text.text("🌐 Step 3/4: Analyzing portal questions and generating answers...")
-            progress_bar.progress(55)
-
-            try:
-                # Create a text summary of resume for the QA prompt
-                resume_summary = """Ibtasam Ahmad — AI/ML Engineer, 4+ years experience.
-Specialties: LLM systems, RAG architectures, multi-agent systems (LangGraph/LangChain),
-vector search (Pinecone, FAISS, Chroma, Weaviate), fine-tuning (LLaMA 3.2, Unsloth),
-backend APIs (FastAPI, Django, Flask), cloud deployment (AWS, GCP, Docker).
-Key projects: CrossGroveAI (insurance), PixadentAI (healthcare), RippleAI (crisis prevention),
-Adelphi Stock Brokers (fintech). Published researcher (LSTM vs QLSTM, arXiv 2024).
-Certifications: Meta, IBM, Microsoft Azure, Stanford/DeepLearning.AI.
-Open to relocation (Middle East, Schengen). Immediately available."""
-
-                qa_prompt = build_portal_qa_prompt(job_text, resume_summary)
-                qa_raw = groq_manager.call_with_fallback(
-                    messages=[{"role": "user", "content": qa_prompt}],
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=4000,
-                    response_format={"type": "json_object"},
-                )
-                qa_data = json.loads(qa_raw)
-                results["questions_answers"] = qa_data.get("questions", [])
-            except Exception as e:
-                st.error(f"❌ Q&A generation failed: {e}")
-                results["questions_answers"] = []
-
-        # ── Step 4: Compile PDFs ───────────────────────────────────────────
-        status_text.text("📄 Step 4/4: Compiling PDFs...")
-        progress_bar.progress(75)
-
-        # Compile Resume PDF
-        resume_pdf_bytes = compile_latex_to_pdf(results["tailored_resume_latex"], "tailored_resume")
-        results["resume_pdf"] = resume_pdf_bytes
-
-        # Compile Cover Letter PDF
-        cover_pdf_bytes = compile_latex_to_pdf(results["tailored_cover_latex"], "tailored_cover_letter")
-        results["cover_pdf"] = cover_pdf_bytes
-
-        progress_bar.progress(100)
-        status_text.empty()
-        st.success("✅ All materials generated successfully!")
-
-        # ── Display Results ────────────────────────────────────────────────
-        st.markdown("---")
-        st.markdown("## 📦 Generated Materials")
-
-        # PDF Downloads Row
-        pdf_col1, pdf_col2, pdf_col3 = st.columns(3)
-
-        with pdf_col1:
-            st.markdown("<div class='output-card'>", unsafe_allow_html=True)
-            st.markdown("### 📄 Tailored Resume")
-            if results.get("resume_pdf"):
-                st.download_button(
-                    label="⬇️ Download Resume PDF",
-                    data=results["resume_pdf"],
-                    file_name=f"Ibtasam_Ahmad_Resume_{job_title.replace(' ', '_')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-            else:
-                st.warning("PDF compilation failed. LaTeX source available below.")
-            copyable_latex("Resume LaTeX", results["tailored_resume_latex"], "resume")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with pdf_col2:
-            st.markdown("<div class='output-card'>", unsafe_allow_html=True)
-            st.markdown("### 📄 Cover Letter")
-            if results.get("cover_pdf"):
-                st.download_button(
-                    label="⬇️ Download Cover Letter PDF",
-                    data=results["cover_pdf"],
-                    file_name=f"Ibtasam_Ahmad_Cover_Letter_{job_title.replace(' ', '_')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-            else:
-                st.warning("PDF compilation failed. LaTeX source available below.")
-            copyable_latex("Cover Letter LaTeX", results["tailored_cover_latex"], "cover")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with pdf_col3:
-            st.markdown("<div class='output-card'>", unsafe_allow_html=True)
-            if mode_value == "email":
-                st.markdown("### 📧 Email")
-                st.markdown(f"**Subject:**")
-                copyable_text("Email Subject", results["email_subject"], "email_subject")
-                st.markdown(f"**Body:**")
-                copyable_text("Email Body", results["email_body"], "email_body")
-            else:
-                st.markdown("### 🌐 Portal Q&A")
-                st.info(f"Found {len(results.get('questions_answers', []))} questions")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Email Mode: Full Email Display ─────────────────────────────────
-        if mode_value == "email":
-            st.markdown("---")
-            st.markdown("## 📧 Complete Email")
-
-            with st.container():
-                st.markdown("<div class='output-card'>", unsafe_allow_html=True)
-
-                st.markdown("#### 📋 Email Subject")
-                copyable_text("Subject", results["email_subject"], "email_subject_full")
-
-                st.markdown("#### 📋 Email Body")
-                copyable_text("Body", results["email_body"], "email_body_full")
-
-                # Full combined email for easy copy
-                full_email = f"Subject: {results['email_subject']}\n\n{results['email_body']}"
-                st.markdown("#### 📋 Full Email (Subject + Body)")
-                copyable_text("Full Email", full_email, "email_full")
-
-                st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Portal Mode: Q&A Display ─────────────────────────────────────
-        else:
-            st.markdown("---")
-            st.markdown("## 🌐 Job Portal Questions & Answers")
-
-            if results.get("questions_answers"):
-                for i, qa in enumerate(results["questions_answers"]):
-                    with st.container():
-                        st.markdown("<div class='output-card'>", unsafe_allow_html=True)
-                        st.markdown(f"**Q{i+1}:** {qa.get('question', 'N/A')}")
-                        copyable_text(f"Answer {i+1}", qa.get('answer', 'N/A'), f"qa_{i}")
-                        st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.warning("No questions were detected. Try pasting more complete portal page text.")
-
-        # ── Session Storage ──────────────────────────────────────────────
-        st.session_state.last_results = results
-        st.session_state.last_job_title = job_title
-
-    # ── Footer ───────────────────────────────────────────────────────────────
     st.markdown("---")
-    st.caption("Built with ❤️ using Streamlit + Groq AI | Ibtasam Ahmad")
+    st.caption("Built with ❤️ by Ibtasam Ahmad")
 
 
 if __name__ == "__main__":
