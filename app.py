@@ -504,7 +504,7 @@ class GroqClientManager:
         messages: List[Dict[str, str]],
         model: str = "llama-3.3-70b-versatile",
         temperature: float = 0.3,
-        max_tokens: int = 8000,
+        # max_tokens: int = 8000,
         response_format: Optional[Dict] = None,
     ) -> str:
         attempts = 0
@@ -515,7 +515,7 @@ class GroqClientManager:
                     "model": model,
                     "messages": messages,
                     "temperature": temperature,
-                    "max_tokens": max_tokens,
+                    # "max_tokens": max_tokens,
                 }
                 if response_format:
                     kwargs["response_format"] = response_format
@@ -878,7 +878,8 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
     try:
         raw = groq.call(
             [{"role": "user", "content": resume_prompt(job_text, job_title, work_mode, job_location, directive)}],
-            model=model, temperature=temperature, max_tokens=8000,
+            model=model, temperature=temperature, 
+            # max_tokens=8000,
         )
         latex, ch = split_latex_and_changes(raw)
         draft["resume_latex"] = latex
@@ -891,7 +892,8 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
     try:
         raw = groq.call(
             [{"role": "user", "content": cover_letter_prompt(job_text, job_title, company, work_mode, job_location, directive)}],
-            model=model, temperature=temperature, max_tokens=6000,
+            model=model, temperature=temperature, 
+            # max_tokens=6000,
         )
         latex, ch = split_latex_and_changes(raw)
         draft["cover_latex"] = latex
@@ -905,7 +907,8 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
         try:
             raw = groq.call(
                 [{"role": "user", "content": email_prompt(job_text, job_title, company, directive, PERSONAL_DETAILS)}],
-                model=model, temperature=temperature, max_tokens=1500,
+                model=model, temperature=temperature, 
+                # max_tokens=1500,
                 response_format={"type": "json_object"},
             )
             data = json.loads(raw)
@@ -920,7 +923,8 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
         try:
             raw = groq.call(
                 [{"role": "user", "content": portal_qa_prompt(job_text, job_title, directive, PERSONAL_DETAILS)}],
-                model=model, temperature=min(temperature, 0.2), max_tokens=6000,
+                model=model, temperature=min(temperature, 0.2), 
+                # max_tokens=6000,
                 response_format={"type": "json_object"},
             )
             data = json.loads(raw)
