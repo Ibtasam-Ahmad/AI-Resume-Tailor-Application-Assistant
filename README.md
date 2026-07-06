@@ -4,6 +4,8 @@ A Streamlit app that heavily tailors a **fixed master resume + cover letter** to
 description using **Groq AI**, adapts the relocation wording to the job's **location & work mode**,
 and lets you **review and edit everything before the PDF is built**.
 
+**Live Preview** : https://ai-resume-tailor-application-assistant.streamlit.app/
+
 The master resume and cover letter are **hardcoded** in `app.py` (for Ibtasam Ahmad) — you never
 upload anything. Paste a job description, review the tailored draft, tweak if needed, approve, download.
 
