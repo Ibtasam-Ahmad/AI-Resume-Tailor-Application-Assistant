@@ -1,2 +1,7 @@
 streamlit>=1.40.0
-groq>=0.9.0
+
+# Provider SDKs — install the one(s) for the provider whose key you configured.
+# Groq / OpenAI / OpenRouter / NVIDIA all use the OpenAI-compatible client:
+openai>=1.40.0
+# Gemini:
+google-generativeai>=0.7.0

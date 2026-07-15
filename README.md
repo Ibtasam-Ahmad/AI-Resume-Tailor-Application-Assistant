@@ -1,7 +1,8 @@
 # 🤖 AI Resume Tailor & Application Assistant
 
 A Streamlit app that heavily tailors a **fixed master resume + cover letter** to a specific job
-description using **Groq AI**, adapts the relocation wording to the job's **location & work mode**,
+description using your choice of **LLM provider** (Groq / OpenAI / OpenRouter / NVIDIA / Gemini),
+adapts the relocation wording to the job's **location & work mode**,
 and lets you **review and edit everything before the PDF is built**.
 
 **Live Preview** : https://ai-resume-tailor-application-assistant.streamlit.app/
@@ -22,9 +23,17 @@ upload anything. Paste a job description, review the tailored draft, tweak if ne
 - **Two application modes:**
   - **📧 Email** — tailored resume PDF + cover letter PDF + application email (subject + body)
   - **🌐 Job Portal** — tailored resume PDF + cover letter PDF + auto-detected Q&A answers
-- **Review → Edit → Approve gate** — the AI shows *what it changed* plus editable boxes; the PDFs are
-  compiled from **exactly what you approve**.
-- **Multi-key Groq failover** — rotates keys only on rate-limit / auth / connection errors.
+- **Full 7-step tailoring** — recruiter weak-spot audit, JD-aligned summary, quantified bullets,
+  gap/transition reframed as growth, ATS keywords, project reordering, and a bold one-line
+  **elevator pitch** embedded in the résumé summary, cover-letter close, and email signature.
+- **Never truncates** — detects when a model hits its output cap and **auto-continues** the LaTeX
+  until `\end{document}`, so long 3–4 page resumes come out complete.
+- **Review → Edit → Approve gate** — the AI shows *what it changed* plus editable boxes; you can
+  **compile & preview the rendered PDF inline** before downloading, and the PDFs are built from
+  **exactly what you approve**.
+- **Multi-provider, auto-detected** — configure a key for **Groq, OpenAI, OpenRouter, NVIDIA, or
+  Gemini** and the app uses that provider automatically. Pick a preset model or enter a custom one.
+- **Multi-key failover** — each provider rotates its keys only on rate-limit / auth / connection errors.
 
 ## 🚀 Quick Start
 
@@ -40,13 +49,19 @@ pip install -r requirements.txt
 
 > Without `pdflatex`, the app still works — it gives you the `.tex` source to compile (e.g. on Overleaf).
 
-### 3. Add your Groq API key(s)
-Edit `.streamlit/secrets.toml`:
+### 3. Add an API key for any one provider
+Edit `.streamlit/secrets.toml` (see `secrets.toml.example`). Configure **any one** of:
 ```toml
-GROQ_API_KEY_1 = "gsk_your_first_key_here"
-GROQ_API_KEY_2 = "gsk_your_second_key_here"   # optional, for failover
+GROQ_API_KEY_1     = "gsk_..."     # Groq
+OPENAI_API_KEY     = "sk-..."      # OpenAI
+OPENROUTER_API_KEY = "sk-or-..."   # OpenRouter
+NVIDIA_API_KEY     = "nvapi-..."   # NVIDIA NIM
+GEMINI_API_KEY     = "AIza..."     # Google Gemini
 ```
-Also supported: single `GROQ_API_KEY`, or comma-separated `GROQ_API_KEYS = "gsk_a,gsk_b"`.
+The app auto-detects which provider is present. Multiple keys per provider are supported for
+failover (`GROQ_API_KEY_1`, `_2`, … or comma-separated `GROQ_API_KEYS = "gsk_a,gsk_b"`); the same
+`_1/_2/…` and plural pattern works for every provider. If you configure more than one provider you
+can switch between them in the sidebar.
 
 ### 4. Run
 ```bash
@@ -63,8 +78,8 @@ streamlit run app.py
 ## 🛠️ Customization
 - **Resume / cover letter:** edit `BASE_RESUME_LATEX` / `BASE_COVER_LETTER_LATEX` in `app.py`.
 - **Home base:** edit `HOME_CITY` / `HOME_COUNTRY` (controls the local-vs-relocate logic).
-- **Models:** pick in the sidebar (`llama-3.3-70b-versatile` recommended). Deprecated Groq models
-  (e.g. `mixtral-8x7b-32768`) have been removed from the list.
+- **Provider & model:** pick in the sidebar. Each provider ships a preset model list, plus an
+  **✏️ Custom model…** option to type any model id the provider supports.
 
 ## 📝 License
 MIT — free to use and modify.

@@ -1,0 +1,389 @@
+
+
+## System Prompt (Universal)
+
+```
+You are an elite recruiter and resume strategist specializing in AI/ML engineering roles. You have access to the candidate's base resume and a job description. Your task is to follow the 7-step process below and output a complete, tailored LaTeX document.
+```
+
+---
+
+## User Prompt: Resume Tailoring
+
+```
+Follow this EXACT 7-step process to rewrite the resume:
+
+:one: **Act like a recruiter in the AI/ML industry.** Review the base resume against the job description. Expose weak spots instantly — missing keywords, vague language, weak metrics, or misaligned focus.
+:arrow_right: Weak spots exposed instantly.
+
+:two: **Rewrite the summary to sound confident, specific, and aligned with "[JOB_TITLE]".**
+:arrow_right: No more vague intros.
+
+:three: **Turn these bullet points into results with numbers + strong action verbs.**
+:arrow_right: Employers love impact, not fluff.
+
+:four: **Reframe any career gaps or transitions as growth or strength.**
+:arrow_right: Weakness → narrative.
+
+:five: **Optimize résumé with ATS keywords + formatting from this job description.**
+:arrow_right: Beat the bots.
+
+:six: **Reorder and rewrite Projects so the most JD-relevant come first.** Rewrite descriptions to mirror JD keywords and outcomes.
+:arrow_right: Personalized > copy-paste.
+
+:seven: **Give me a one-line elevator pitch for interviews + networking** — embed it in the Professional Summary as a bold, memorable closing line.
+:arrow_right: Clear. Memorable. Confident.
+
+---
+
+OUTPUT INSTRUCTIONS (separate from the 7 steps):
+- Output ONLY the complete tailored LaTeX document (\documentclass ... \end{document}).
+- Then a new line with exactly: ===CHANGES===
+- Then 5-7 bullet points (each starting with "- ") naming the key changes.
+
+CRITICAL RULES:
+- Keep the EXACT LaTeX preamble, packages, and document structure.
+- Use ONLY facts from the base resume — NEVER invent employers, dates, projects, or numbers.
+- This is a 3-4 page resume. Generate the COMPLETE document. Do not truncate.
+- If you must stop mid-generation, end at a clean section boundary (after \end{itemize} or \end{tabularx}). Never stop mid-command or mid-environment.
+
+LOCATION & WORK-ARRANGEMENT DIRECTIVE:
+[LOCATION_DIRECTIVE]
+
+DETECTED JOB TITLE: [JOB_TITLE]
+WORK MODE: [WORK_MODE]
+JOB LOCATION: [JOB_LOCATION]
+
+BASE RESUME (LaTeX):
+```latex
+[BASE_RESUME_LATEX]
+```
+
+JOB DESCRIPTION:
+```
+[JOB_TEXT]
+```
+```
+
+---
+
+## User Prompt: Cover Letter Tailoring
+
+```
+Follow this EXACT 7-step process to write the cover letter:
+
+:one: **Act like a recruiter in the AI/ML industry.** Review the base cover letter against the job description. Identify where it feels generic, weak, or misaligned.
+:arrow_right: Weak spots exposed instantly.
+
+:two: **Rewrite the opening to sound confident, specific, and aligned with "[JOB_TITLE]".** Hook the reader in the first sentence.
+:arrow_right: No more vague intros.
+
+:three: **Turn paragraphs into proof + impact with numbers + strong action verbs.** Every claim backed by real project/metric.
+:arrow_right: Employers love impact, not fluff.
+
+:four: **Reframe any potential concerns (relocation, gaps, transitions) as growth or strength.**
+:arrow_right: Weakness → narrative.
+
+:five: **Optimize with ATS keywords + language from this job description.**
+:arrow_right: Beat the bots.
+
+:six: **Write a short, tailored cover letter for this job.** No copy-paste fluff. Every sentence earns its place.
+:arrow_right: Personalized > copy-paste.
+
+:seven: **Give me a one-line elevator pitch for interviews + networking** — embed it in the closing paragraph.
+:arrow_right: Clear. Memorable. Confident.
+
+---
+
+OUTPUT INSTRUCTIONS:
+- Output ONLY the complete tailored LaTeX document (\documentclass ... \end{document}).
+- Then: ===CHANGES===
+- Then 4-6 bullet points naming key changes.
+
+CRITICAL RULES:
+- Keep the EXACT LaTeX structure.
+- Use ONLY real experience from the base letter. Never invent facts.
+- Generate the COMPLETE document.
+
+LOCATION & WORK-ARRANGEMENT DIRECTIVE:
+[LOCATION_DIRECTIVE]
+
+DETECTED JOB TITLE: [JOB_TITLE]
+COMPANY: [COMPANY]
+WORK MODE: [WORK_MODE]   JOB LOCATION: [JOB_LOCATION]
+
+BASE COVER LETTER (LaTeX):
+```latex
+[BASE_COVER_LETTER_LATEX]
+```
+
+JOB DESCRIPTION:
+```
+[JOB_TEXT]
+```
+```
+
+---
+
+## User Prompt: Application Email
+
+```
+Follow this EXACT 7-step process:
+
+:one: **Act like a recruiter in the AI/ML industry.** Review the job description. What makes a hiring manager OPEN and RESPOND?
+:arrow_right: Weak spots exposed instantly.
+
+:two: **Write a subject line that sounds confident, specific, and aligned with "[JOB_TITLE]".** Include proof point + name.
+:arrow_right: No more vague intros.
+
+:three: **Turn the body into 3-4 tight paragraphs with numbers + strong action verbs.** Lead with the single most relevant achievement.
+:arrow_right: Employers love impact, not fluff.
+
+:four: **Reframe location/availability as proactive readiness, not burden.**
+:arrow_right: Weakness → narrative.
+
+:five: **Optimize with ATS keywords from the JD.**
+:arrow_right: Beat the bots.
+
+:six: **Write a short, tailored application email for this job.** Include: "Please find attached my tailored resume and cover letter as PDFs."
+:arrow_right: Personalized > copy-paste.
+
+:seven: **Give me a one-line elevator pitch for interviews + networking** — embed in the signature area.
+:arrow_right: Clear. Memorable. Confident.
+
+---
+
+APPLICANT:
+- Name: [FIRST_NAME] [LAST_NAME]
+- Email: [EMAIL]  | Phone: [PHONE]  | Base: [CITY], [COUNTRY]
+- LinkedIn: [LINKEDIN]  | GitHub: [GITHUB]
+
+LOCATION DIRECTIVE:
+[LOCATION_DIRECTIVE]
+
+JOB DESCRIPTION:
+```
+[JOB_TEXT]
+```
+
+OUTPUT (JSON only):
+{
+  "email_subject": "...",
+  "email_body": "...",
+  "changes": ["..."]
+}
+```
+
+---
+
+## User Prompt: Portal Q&A
+
+```
+Follow this EXACT 7-step process:
+
+:one: **Act like a recruiter in the AI/ML industry.** Read the portal text. Detect ALL fields and what the employer REALLY wants.
+:arrow_right: Weak spots exposed instantly.
+
+:two: **Rewrite personal fields using exact provided details** — no improvisation.
+:arrow_right: No more vague intros.
+
+:three: **Turn open-ended answers into results with numbers + strong action verbs.** 2-4 sentences max.
+:arrow_right: Employers love impact, not fluff.
+
+:four: **Reframe gaps/transitions as growth or strength.**
+:arrow_right: Weakness → narrative.
+
+:five: **Optimize every answer with ATS keywords from the job description.**
+:arrow_right: Beat the bots.
+
+:six: **Write tailored, concise answers for each question.** No copy-paste fluff.
+:arrow_right: Personalized > copy-paste.
+
+:seven: **Give me a one-line elevator pitch for "Why this role?"**
+:arrow_right: Clear. Memorable. Confident.
+
+---
+
+PERSONAL DETAILS (use EXACTLY):
+- Full Name: [FIRST_NAME] [LAST_NAME]   | Email: [EMAIL]   | Phone: [PHONE]
+- City: [CITY]   | Country: [COUNTRY]   | Province: [PROVINCE]   | Zip: [ZIP_CODE]
+- Address: [ADDRESS]   | Notice Period: [NOTICE_PERIOD]   | Visa: [VISA_STATUS]
+- LinkedIn: [LINKEDIN]   | GitHub: [GITHUB]
+
+LOCATION DIRECTIVE:
+[LOCATION_DIRECTIVE]
+
+JOB PORTAL TEXT:
+```
+[JOB_TEXT]
+```
+
+OUTPUT (JSON only):
+{
+  "questions": [{"question": "...", "answer": "..."}],
+  "changes": ["..."]
+}
+```
+
+---
+
+## Variables to Replace
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `[JOB_TITLE]` | Extracted from JD | "Senior AI Engineer" |
+| `[WORK_MODE]` | Onsite/Hybrid/Remote | "Remote" |
+| `[JOB_LOCATION]` | City, Country | "Dubai, UAE" |
+| `[COMPANY]` | Extracted from JD or "not detected" | "Google" |
+| `[LOCATION_DIRECTIVE]` | Generated based on work mode + location | See below |
+| `[BASE_RESUME_LATEX]` | Your full resume LaTeX | `\documentclass...` |
+| `[BASE_COVER_LETTER_LATEX]` | Your full cover letter LaTeX | `\documentclass...` |
+| `[JOB_TEXT]` | Full pasted job description | — |
+| `[FIRST_NAME]` | From resume header | "Ibtasam" |
+| `[LAST_NAME]` | From resume header | "Ahmad" |
+| `[EMAIL]` | From resume | "shibtasam@gmail.com" |
+| `[PHONE]` | From resume | "+92 315 0180953" |
+| `[CITY]` | HOME_CITY | "Lahore" |
+| `[COUNTRY]` | HOME_COUNTRY | "Pakistan" |
+| `[PROVINCE]` | "Province" or actual | "Punjab" |
+| `[ZIP_CODE]` | "00000" or actual | "54000" |
+| `[ADDRESS]` | Generated | "Lahore, Punjab, Pakistan" |
+| `[NOTICE_PERIOD]` | "Immediate" | "Immediate" |
+| `[VISA_STATUS]` | "Eligible for employer-sponsored work visa" | — |
+| `[LINKEDIN]` | From resume | "linkedin.com/in/ibtasam-ahmad" |
+| `[GITHUB]` | From resume | "github.com/Ibtasam-Ahmad" |
+
+---
+
+## Location Directive Generator (Use in Code)
+
+```python
+def build_location_directive(work_mode: str, job_location: str) -> str:
+    loc = (job_location or "").strip()
+    wm = work_mode.strip().lower()
+
+    if wm == "remote":
+        return (
+            "WORK ARRANGEMENT: FULLY REMOTE.\n"
+            "- REMOVE every relocation statement everywhere.\n"
+            "- Emphasize remote collaboration, async communication, self-management.\n"
+            "- Header tagline: replace relocation with ': Open to Remote Roles'."
+        )
+
+    if not loc:
+        return (
+            f"WORK ARRANGEMENT: {work_mode.upper()}.\n"
+            "- Keep ONE concise availability line; do not over-emphasize relocation."
+        )
+
+    is_home = HOME_CITY.lower() in loc.lower()
+    if is_home:
+        return (
+            f"WORK ARRANGEMENT: {work_mode.upper()} in {loc} — HOME city.\n"
+            "- REMOVE all relocation language everywhere.\n"
+            f"- Present as LOCAL professional in {HOME_CITY}, available immediately."
+        )
+
+    return (
+        f"WORK ARRANGEMENT: {work_mode.upper()} in {loc}.\n"
+        f"- Candidate lives in {HOME_CITY}, {HOME_COUNTRY} and will RELOCATE to {loc}.\n"
+        f"- Replace generic relocation phrases with SPECIFIC commitment to {loc}.\n"
+        f"- Update header tagline and Relocation row to name {loc}."
+    )
+```
+
+---
+
+## Provider-Specific API Call Templates
+
+### OpenRouter
+```python
+headers = {
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
+    "HTTP-Referer": "https://your-app.streamlit.app",
+}
+payload = {
+    "model": "meta-llama/llama-3.3-70b-instruct",
+    "messages": [{"role": "user", "content": prompt}],
+    "temperature": 0.3,
+    "max_tokens": 8000,
+}
+```
+
+### Groq
+```python
+from groq import Groq
+client = Groq(api_key=GROQ_API_KEY)
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3,
+    max_tokens=8000,
+)
+```
+
+### NVIDIA NIM
+```python
+headers = {
+    "Authorization": f"Bearer {NVIDIA_API_KEY}",
+    "Content-Type": "application/json",
+}
+payload = {
+    "model": "meta/llama-3.1-70b-instruct",
+    "messages": [{"role": "user", "content": prompt}],
+    "temperature": 0.3,
+    "max_tokens": 8000,
+}
+```
+
+### OpenAI GPT
+```python
+from openai import OpenAI
+client = OpenAI(api_key=OPENAI_API_KEY)
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3,
+    max_tokens=8000,
+)
+```
+
+### Google Gemini
+```python
+import google.generativeai as genai
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
+response = model.generate_content(
+    prompt,
+    generation_config=genai.GenerationConfig(
+        temperature=0.3,
+        max_output_tokens=8192,
+    ),
+)
+```
+
+---
+
+## Continuation Prompt (If Output Is Truncated)
+
+If the model stops mid-document, send this as the next user message:
+
+```
+You were generating a LaTeX document and stopped mid-output. You were in the '[LAST_SECTION]' section.
+Continue EXACTLY from where you left off — output ONLY the continuation, no explanations, no repetition of already-generated content.
+Continue the raw LaTeX code immediately. Remember: the document must end with \end{document}.
+```
+
+---
+
+## Post-Processing Steps (Same for All Providers)
+
+1. **Strip markdown fences**: Remove ` ```latex ` and ` ``` `
+2. **Extract LaTeX**: Find `\documentclass` to `\end{document}`
+3. **Split changes**: Split on `===CHANGES===` marker
+4. **Parse bullets**: Lines starting with `- ` after the marker
+5. **Sanitize unicode**: Replace `–` with `--`, `—` with `---`, etc.
+6. **Compile PDF**: Run `pdflatex` twice, or download `.tex` for Overleaf
+
+---

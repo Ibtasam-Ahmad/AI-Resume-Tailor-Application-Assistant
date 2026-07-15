@@ -14,11 +14,15 @@ Key behaviors:
 - JD-centric tailoring: summary, skills, projects, bullets reorganized around the JD.
 - Review -> Edit -> Approve gate: AI shows what changed in editable boxes; the PDF is
   compiled from YOUR (possibly edited) version only after you approve.
-- Multiple Groq API keys with automatic failover on rate-limit / auth errors.
+- Multi-provider: Groq / OpenAI / OpenRouter / NVIDIA / Gemini. The active provider is
+  auto-detected from whichever API key is present in secrets.toml; pick from that
+  provider's preset models or enter a custom model id.
+- Multiple API keys per provider with automatic failover on rate-limit / auth errors.
 
 Setup:
 1. pip install -r requirements.txt
-2. Create .streamlit/secrets.toml with your Groq API key(s)
+2. Create .streamlit/secrets.toml with an API key for any supported provider
+   (e.g. OPENAI_API_KEY, GROQ_API_KEY_1, OPENROUTER_API_KEY, NVIDIA_API_KEY, GEMINI_API_KEY)
 3. Install pdflatex (TeX Live / MiKTeX) for PDF output
 4. streamlit run app.py
 """
@@ -26,11 +30,13 @@ Setup:
 import os
 import re
 import json
+import base64
 import subprocess
 import tempfile
 from typing import Optional, List, Dict, Tuple
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 # ── Page config MUST be the first Streamlit call ─────────────────────────────
 st.set_page_config(
@@ -41,18 +47,18 @@ st.set_page_config(
 )
 
 # ── Third-party imports ──────────────────────────────────────────────────────
-try:
-    from groq import Groq
-except ImportError:
-    st.error("`groq` package not installed. Run: pip install groq")
-    raise
+# Provider SDKs are imported LAZILY inside LLMClientManager so the app only needs
+# the package for the provider you actually configured a key for:
+#   Groq / OpenAI / OpenRouter / NVIDIA  -> `openai`  (all OpenAI-compatible)
+#   Gemini                               -> `google-generativeai`
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  MASTER RESUME & COVER LETTER  (HARDCODED — the app always uses these)
 # ═════════════════════════════════════════════════════════════════════════════
 
-BASE_RESUME_LATEX = r"""\documentclass[a4paper,10pt]{article}
+BASE_RESUME_LATEX = r"""
+\documentclass[a4paper,10pt]{article}
 
 \usepackage[left=0.7in,top=0.7in,right=0.7in,bottom=0.7in]{geometry}
 \usepackage{enumitem}
@@ -87,9 +93,27 @@ BASE_RESUME_LATEX = r"""\documentclass[a4paper,10pt]{article}
     \href{https://github.com/Ibtasam-Ahmad}{github.com/Ibtasam-Ahmad}
 \end{center}
 
+% \vspace{4pt}
+
 % --- PROFESSIONAL SUMMARY ---
-\section*{Professional Summary}
-Applied AI Engineer with \textbf{4+ years} of experience designing production-grade LLM systems, RAG architectures, autonomous AI agents, and scalable AI SaaS products. Specialized in Large language models, vector search, multi-agent orchestration (LangGraph/LangChain), and fine-tuning open-source models (LLaMA, GPT).  Skilled in \textbf{LangGraph, LangChain, OpenAI, Claude, Gemini, Llama, Pinecone, Weaviate, LangSmith, AWS, Docker, and Open Source Models}. Proven track record of delivering enterprise AI solutions that automate workflows and reduce manual effort by \textbf{60--70\%}. Published researcher (LSTM vs QLSTM, arXiv 2024). \textbf{Actively seeking opportunities in Middle East, and Schengen countries. Available for immediate relocation.}
+\section*{Professional Summary} 
+Applied AI Engineer with \textbf{4+ years} of experience designing production-grade LLM systems, RAG architectures, autonomous AI agents, and scalable AI SaaS products. Specialized in Large language models, vector search, multi-agent orchestration (LangGraph/LangChain), and fine-tuning open-source models (LLaMA, GPT).  Skilled in \textbf{LangGraph, LangChain, OpenAI, Claude, Gemini, Llama, Pinecone, Weaviate, LangSmith, AWS, Docker, and Open Source Models}. Proven track record of delivering enterprise AI solutions that automate workflows and reduce manual effort by \textbf{60--70\%}. Published researcher (LSTM vs QLSTM, arXiv 2024). \textbf{Actively seeking opportunities and available for immediate relocation.}
+% \section*{Professional Summary}
+% Applied AI Engineer with \textbf{4+ years} of experience building production-ready LLM applications, Agentic AI systems, RAG architectures, and AI SaaS products. Skilled in \textbf{LangGraph, LangChain, OpenAI, Claude, Gemini, Llama, Pinecone, Weaviate, LangSmith, AWS, Docker, and Open Source Models}. Proven track record of delivering enterprise AI solutions that automate workflows and reduce manual effort by \textbf{60--70\%}. Published researcher (\textbf{LSTM vs QLSTM}, arXiv 2024). \textbf{Open to AI Engineer, Applied AI, and GenAI roles across the Middle East and Schengen region with immediate relocation availability.}
+
+% --- CORE TECHNOLOGIES ---
+% \section*{Core Technologies}
+% \begin{tabularx}{\textwidth}{@{}>{\raggedleft\arraybackslash}p{3.2cm}X@{}}
+% \textbf{LLMs \& Models} & GPT-4, Claude, Gemini, LLaMA (3.2), HuggingFace, OpenAI API, Groq \\
+% \textbf{AI Frameworks} & LangChain, LangGraph, LangSmith, AbacusAI, AutoGen, LlamaIndex \\
+% \textbf{Vector Search} & FAISS, Pinecone, Chroma, Weaviate, Hybrid Search, PgVector \\
+% \textbf{Agents \& Orchestration} & Multi-Agent Systems, LangGraph workflows, persistent memory, task routing \\
+% \textbf{Backend \& APIs} & Python, FastAPI, Django, Flask, Django REST, RESTful APIs, WebSockets \\
+% \textbf{Cloud \& DevOps} & AWS (EC2, S3, Lambda), GCP (Vertex AI, Cloud Run), Docker, CI/CD \\
+% \textbf{Computer Vision} & YOLO, OCR, Tesseract, Image Processing \\
+% \textbf{Databases} & PostgreSQL, MongoDB, BigQuery, SQL, Redis \\
+% \textbf{Other} & Twilio API, Vapi, Whisper, ffmpeg, Scrapy, Selenium \\
+% \end{tabularx}
 
 \section*{Core Technologies}
 \noindent
@@ -111,10 +135,13 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
 \textbf{Senior AI/ML Engineer} \hfill Nov 2025 -- Present\\
 \textit{Visnext Software Solutions, Lahore, Pakistan}
 \begin{itemize}
-    \item Architected enterprise RAG pipelines with LLaMA 3.2 fine-tuning (Unsloth) and vector indexing (FAISS/Chroma), \textbf{reducing manual reporting by 60\%} for 5+ enterprise clients
-    \item Developed multi-agent AI architectures for autonomous reasoning and task execution across complex workflows
-    \item Built production chatbots/voicebots handling \textbf{5,000+ monthly conversations} (Twilio, Vapi integration)
-    \item Automated property insights using BigQuery + Gemini, \textbf{cutting analysis turnaround time by 40\%}
+    \item Architected enterprise RAG pipelines with Gemma4 fine-tuning (Unsloth) and vector indexing (FAISS/Chroma), \textbf{reducing manual reporting by 60\%} for 5+ enterprise clients
+    \item Developed multi-agent AI architectures using LangChain and AutoGen for autonomous reasoning and task execution across complex workflows
+    \item Implemented MCP (Model Context Protocol) for seamless integration between LLMs and external data sources and tools
+    \item Designed agentic AI tool orchestration frameworks enabling autonomous decision-making and tool selection
+    \item Created function calling systems for LLMs to interact with external APIs and databases
+    \item Implemented real-time data processing pipelines with streaming analytics for enterprise clients
+    \item \textbf{Independently developed end-to-end SaaS solutions} for PixadentAI, AI HR Flow Automation, and CrossGroveAI, delivering specialized AI products that reduced manual clinical documentation by 75\%, cut recruitment cycle time by 50\%, and eliminated manual insurance data entry for multi-insurer comparisons
 \end{itemize}
 
 \vspace{4pt}
@@ -122,10 +149,13 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
 \textbf{Python / AI Developer} \hfill May 2025 -- Nov 2025\\
 \textit{Infolyze Solutions, Lahore, Pakistan}
 \begin{itemize}
-    \item Architected end-to-end AI pipelines using data ingestion, LLM fine-tuning (LLaMA 3.2/Unsloth), and vector indexing (FAISS, Chroma) for enterprise knowledge systems
-    \item Built RAG-driven report generation and contextual chatbot products supporting enterprise document Q\&A and summarization workflows
-    \item Deployed production-ready chatbots and voicebots (Twilio) integrated with APIs and databases
+    \item Built Multi Modal RAG-driven report generation and contextual chatbot products supporting enterprise document Q\&A and summarization workflows
+    \item Built production chatbots/voicebots handling \textbf{5,000+ monthly conversations} (Twilio, Vapi, ElevenLabs integration)
+    \item Automated property insights using BigQuery + Gemini, \textbf{cutting analysis turnaround time by 40\%}
     \item Built multiple AI SaaS tools (resume analyzer, OCR automation, translators) contributing to new revenue streams
+    \item Implemented agentic workflows using CrewAI and LangGraph for complex multi-step task automation
+    \item Developed tool orchestration systems enabling dynamic API selection and execution based on contextual understanding
+    \item Created multimodal RAG systems capable of processing images, text, and sketches for richer context understanding
 \end{itemize}
 
 \vspace{4pt}
@@ -134,8 +164,13 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
 \textit{DigiMark Developers, Lahore, Pakistan}
 \begin{itemize}
     \item Delivered RAG-driven chatbots and voicebots using OpenAI, Claude, and HuggingFace models in live production
-    \item Designed and deployed scalable APIs using Django REST, Flask, and FastAPI
-    \item Built hybrid search solutions using SQL + vector databases (Pinecone, FAISS, Chroma) increasing retrieval precision
+    \item Designed and deployed scalable APIs using Django REST, Flask, and FastAPI. Built hybrid search solutions using SQL + vector databases (Pinecone, FAISS, Chroma) increasing retrieval precision
+    \item Created multimodal AI systems for processing images, text, and web search queries
+    \item Pioneered modern AI implementations including MCP, agentic tool orchestration, and function calling frameworks for LLM-external system integration
+    \item \textbf{Developed ``Laila'' Translation AI system} with domain-specific knowledge for enhanced user interactions. Multilingual khutba translation API with real-time Quranic verse search.
+    \item \textbf{Built industry-specific chatbots for construction and education sectors} with specialized knowledge bases and search integrated.
+    \item \textbf{Created RAG-based call bot systems} with contextual awareness and dynamic response generation
+    \item \textbf{Developed Small Language Models (SLMs)} for resource-constrained environments with optimized performance
 \end{itemize}
 
 \vspace{4pt}
@@ -145,17 +180,22 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
 \begin{itemize}
     \item Built AI solutions for NLP, OCR, and CV tasks using PyTorch, Keras, and scikit-learn
     \item Delivered LSTM-based prediction tools and OCR systems automating manual data processing for SMEs
+    \item Implemented basic tool integration patterns for AI systems to interact with external data sources
+    \item Developed computer vision solutions for PPE detection and parking violation monitoring
+    \item \textbf{Pioneered call bot implementation using GPT-3.5 Turbo} immediately after its release, demonstrating rapid adoption of emerging technologies
+    \item \textbf{Developed train monitoring system using computer vision} to detect obstacles and ensure railway safety
 \end{itemize}
+
 
 % --- SELECTED PROJECTS ---
 \section*{Projects}
 
 \begin{itemize}[leftmargin=0pt, label={}]
     \item \textbf{CrossGroveAI (Insurance)}: FastAPI, MongoDB, Gemini AI, Groq, AWS S3, Docker \\
-    Multi-tenant AI orchestrator automating insurance renewal, negotiation, and quotation workflows using hybrid LLM+OCR with state-machine tracking.
+    Multi-tenant AI orchestrator automating insurance renewal, negotiation, and quotation workflows using hybrid LLM+OCR with state-machine tracking; \textbf{eliminated manual data entry for multi-insurer rate comparisons} and enabled rapid tender generation.
 
     \item \textbf{PixadentAI (Healthcare)}: FastAPI, PostgreSQL, AWS Transcribe Medical, Whisper, Claude API, Docker \\
-    Clinical audio AI converting dental recordings to structured clinical notes with real-time cost analytics by tenant.
+    Clinical audio AI converting dental recordings to structured clinical notes with real-time cost analytics by tenant. \textbf{reduced manual clinical documentation time by 75\%} for dental practices.
 
     \item \textbf{GuardianAI (Crisis Prevention)}: FastAPI, LangGraph, WeaviateDB, OpenAI GPT-4, Claude \\
     Suicide/Abuse prevention platform with trigger detection, intent classification, and crisis routing using multi-agent orchestration.
@@ -170,7 +210,7 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
     End-to-end recruitment automation: job import, multi-LLM resume parsing \& scoring, AI voice interviews via ElevenLabs, Calling via Twillio, and automated interview scheduling with Google Calendar; \textbf{reduced recruitment cycle time by 50\%}.
 
     \item \textbf{Laila App}: FastAPI, Search Algorithms \\
-    Multilingual khutba translation API with real-time Quranic search - \textbf{relevant for GCC markets}.
+    Multilingual khutba translation API with real-time Quranic search.
 
     \item \textbf{Pen Testing Agent Platform}: PostgreSQL, FastAPI, LangChain, OpenAI \\
     Automated vulnerability assessment, reducing manual analysis cycles by 50\%.
@@ -182,9 +222,11 @@ Applied AI Engineer with \textbf{4+ years} of experience designing production-gr
 % --- ADDITIONAL PROJECTS ---
 \section*{Additional Projects}
 \noindent
-\textbf{AI/ML:} Chat-Bot \& Voice-Bot Web/Call App, CRE AI Tutor, Resume Analyzer (OCR+NLP+Vector DB), Chef Chatbot, Construction Chatbot, Sketch-This App, PDF-Based Custom Chatbot, Chat with CSV, Time Series Forecasting Suite (ARIMA/SARIMA/Prophet), Neural \& Quantum Neural Predictions (LSTM/QLSTM), Sentiment + Metaphor Detection. \\
-\textbf{Computer Vision:} Wrong Parking Detection (YOLO), PPE Detection (YOLO), Screenshot Classification System. \\
-\textbf{Data \& Automation:} Ebay Monitoring System (Time Series Forecasting), Scraper and Analytics Dashboard (BeautifulSoup, Scrapy, Pandas), Creator Ranking System (LSTM, Random Forest, NLP).
+\textbf{AI/ML:} Chat-Bot \& Voice-Bot Web/Call App, CRE AI Tutor, Resume Analyzer (OCR+NLP+Vector DB), Chef Chatbot, Construction Chatbot, Sketch-This App, PDF-Based Custom Chatbot, Chat with CSV, Time Series Forecasting Suite (ARIMA/SARIMA/Prophet), Neural \& Quantum Neural Predictions (LSTM/QLSTM), MCP Implementation, Agentic AI Tool Orchestration, Function Calling Systems, Small Language Models (SLMs), Multimodal RAG Systems, Sentiment + Metaphor Detection,.\\
+\textbf{Computer Vision:} Wrong Parking Detection (YOLO), PPE Detection (YOLO), Screenshot Classification System, Train Obstacle Detection System. \\
+\textbf{Data \& Automation:} Ebay Monitoring System (Time Series Forecasting), Scraper and Analytics Dashboard (BeautifulSoup, Scrapy, Pandas), Creator Ranking System (LSTM, Random Forest, NLP), Real-time Data Processing Pipelines, Streaming Analytics.\\
+\textbf{Frameworks \& Tools:} LangChain, AutoGen, CrewAI, LangGraph, Unsloth, FAISS, Chroma, Pinecone, Weaviate, Twilio, Vapi, ElevenLabs, Django REST, Flask, FastAPI, NLP, PyTorch, Keras, scikit-learn.
+
 
 % --- EDUCATION ---
 \section*{Education}
@@ -202,7 +244,7 @@ FYP: Personal Protection Equipment Detection (YOLO)
 % --- PUBLICATIONS ---
 \section*{Publications}
 \begin{itemize}[leftmargin=1.5em]
-    \item Mahmood, T., \textbf{Ahmad, I.}, Ansar, M. M. Z., Darwish, J. A. \& Sherwani, R. A. K. (2024). \textit{Comparative Study of Long Short-Term Memory (LSTM) and Quantum Long Short-Term Memory (QLSTM): Prediction of Stock Market Movement.} arXiv:2409.08297. \\
+    \item Mahmood, T., \textbf{Ahmad, I.}, Ansar, M. M. Z., Darwish, J. A. \& Sherwani, R. A. K. (2024). \textit{Comparative Study of Long Short-Term Memory (LSTM) and Quantum Long Short-Term Memory (QLSTM): Prediction of Stock Market Movement.} arXiv:2409.08297. 
     \href{https://doi.org/10.48550/arXiv.2409.08297}{https://doi.org/10.48550/arXiv.2409.08297}
 \end{itemize}
 
@@ -217,17 +259,18 @@ FYP: Personal Protection Equipment Detection (YOLO)
     \item National Vocational and Technical Training Commission -- Artificial Intelligence
 \end{itemize}
 
-% --- LANGUAGES & RELOCATION ---
+% --- LANGUAGES \& RELOCATION ---
 \section*{Languages \& Relocation}
+% \begin{tabularx}{\textwidth}{@{}>{\raggedleft\arraybackslash}p{3.2cm}X@{}}
 \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3cm} X @{}}
 \textbf{English} & Professional Working Proficiency (written \& spoken) \\
 \textbf{Urdu} & Native \\
 \textbf{Arabic} & Basic Reading \\
-\textbf{Relocation} & \textbf{Immediately available} for Middle East, and Schengen countries \\
+\textbf{Relocation} & \textbf{Immediately available} for relocation \\
 \textbf{Visa Status} & Eligible for employer-sponsored work visa \\
 \end{tabularx}
 
-% --- LEADERSHIP & COMMUNITY ---
+% --- LEADERSHIP \& COMMUNITY ---
 \section*{Leadership \& Community}
 \begin{itemize}[leftmargin=1.5em]
     \item President -- CHEP Literary \& Event Societies
@@ -238,20 +281,22 @@ FYP: Personal Protection Equipment Detection (YOLO)
     \item LinkedIn Creator (22,000+ followers) sharing AI insights
 \end{itemize}
 
-% --- CONFERENCES & COMPETITIONS ---
+% --- CONFERENCES \& COMPETITIONS ---
 \section*{Conferences \& Competitions}
 \begin{itemize}[leftmargin=1.5em]
     \item Connected Pakistan Conference 2022
     \item NASA Space Competition Pakistan 2022
-    \item Future Fest Pakistan 2023, 2024, 2025
+    \item Future Fest Pakistan 2023, 2024, 2025, 2026
     \item Tech Conference by PITB (Punjab IT Board) 2022, 2023, 2024
     \item Startup Grind Lahore 2025
 \end{itemize}
 
-\end{document}"""
+\end{document}
 
+"""
 
-BASE_COVER_LETTER_LATEX = r"""\documentclass[10.7pt,a4paper]{article}
+BASE_COVER_LETTER_LATEX = r"""
+\documentclass[10.7pt,a4paper]{article}
 
 \usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry}
 \usepackage{hyperref}
@@ -270,7 +315,7 @@ BASE_COVER_LETTER_LATEX = r"""\documentclass[10.7pt,a4paper]{article}
 % --- Sender Info (Top Right) ---
 \begin{flushright}
 \textbf{Ibtasam Ahmad}\\
-AI/ML Engineer -- Production RAG \& Multi-Agent Systems\\
+AI/ML Engineer – Production RAG \& Multi-Agent Systems\\
 Lahore, Pakistan\\
 +92 315 0180953\\
 \href{mailto:shibtasam@gmail.com}{shibtasam@gmail.com}\\
@@ -294,19 +339,19 @@ Dear Hiring Manager,
 I am writing to apply for the AI/ML Engineer position at your organization. With \textbf{4+ years} of experience designing production-grade LLM systems, RAG architectures, and autonomous multi-agent systems, I am confident in my ability to deliver impactful AI solutions for your team. I am \textbf{immediately available for relocation} to the Middle East, Schengen countries, or any global tech hub.
 
 % --- Body Paragraph 1: RAG and Production Experience ---
-My expertise centers on building enterprise-grade RAG pipelines and AI agents that drive measurable business outcomes. At \textbf{Visnext Software Solutions}, I architected RAG systems using LLaMA 3.2 fine-tuning (Unsloth) and vector indexing with FAISS/Chroma, \textbf{reducing manual reporting efforts by 60\%} across 5+ enterprise clients. I developed multi-agent architectures using LangGraph for autonomous reasoning and complex workflow execution, and deployed production chatbots/voicebots handling \textbf{5,000+ monthly conversations} via Twilio and Vapi. I also built an end-to-end \textbf{AI HR Flow Automation} platform that imports job listings, parses and scores resumes using multi-provider LLMs, conducts AI-powered voice interviews via ElevenLabs, and automates interview scheduling through Google Calendar \textbf{reducing recruitment cycle time by 50\%}. At \textbf{Infolyze Solutions}, I built end-to-end AI pipelines and SaaS tools---including resume analyzers and OCR automation---that opened new revenue streams and automated document Q\&A workflows.
+My expertise centers on building enterprise-grade RAG pipelines and AI agents that drive measurable business outcomes. At \textbf{Visnext Software Solutions}, I architected RAG systems using LLaMA 3.2 fine-tuning (Unsloth) and vector indexing with FAISS/Chroma, \textbf{reducing manual reporting efforts by 60\%} across 5+ enterprise clients. I developed multi-agent architectures using LangGraph for autonomous reasoning and complex workflow execution, and deployed production chatbots/voicebots handling \textbf{5,000+ monthly conversations} via Twilio and Vapi. I also built an end-to-end \textbf{AI HR Flow Automation} platform that imports job listings, parses and scores resumes using multi-provider LLMs, conducts AI-powered voice interviews via ElevenLabs, and automates interview scheduling through Google Calendar \textbf{reducing recruitment cycle time by 50\%}. At \textbf{Infolyze Solutions}, I built end-to-end AI pipelines and SaaS tools—including resume analyzers and OCR automation—that opened new revenue streams and automated document Q\&A workflows.
 
 % --- Body Paragraph 2: Full-Stack AI Engineering ---
-My technical stack is comprehensive and production-ready: \textbf{LangChain, LangGraph, and LangSmith} for agent orchestration; \textbf{FAISS, Pinecone, Chroma, Weaviate, and hybrid search} for vector retrieval; and \textbf{FastAPI, Django, and Flask} for scalable API development. I deploy on \textbf{AWS (EC2, S3, Lambda)} and \textbf{GCP (Vertex AI, Cloud Run)}, with Docker and CI/CD ensuring reliable delivery. Notable projects include \textbf{GuardianAI}---a crisis prevention platform using multi-agent orchestration for trigger detection and crisis routing; \textbf{CrossGroveAI}, an insurance orchestrator automating renewal, negotiation, and quotation workflows with hybrid LLM+OCR; and \textbf{ForecastAI}, a fintech platform improving stock prediction accuracy by 6--12\% using hybrid models (LSTM, Random Forest, Prophet). These experiences demonstrate my ability to architect, build, and scale complex AI products from concept to production.
+My technical stack is comprehensive and production-ready: \textbf{LangChain, LangGraph, and LangSmith} for agent orchestration; \textbf{FAISS, Pinecone, Chroma, Weaviate, and hybrid search} for vector retrieval; and \textbf{FastAPI, Django, and Flask} for scalable API development. I deploy on \textbf{AWS (EC2, S3, Lambda)} and \textbf{GCP (Vertex AI, Cloud Run)}, with Docker and CI/CD ensuring reliable delivery. Notable projects include \textbf{GuardianAI}—a crisis prevention platform using multi-agent orchestration for trigger detection and crisis routing; \textbf{CrossGroveAI}, an insurance orchestrator automating renewal, negotiation, and quotation workflows with hybrid LLM+OCR; and \textbf{ForecastAI}, a fintech platform improving stock prediction accuracy by 6--12\% using hybrid models (LSTM, Random Forest, Prophet). These experiences demonstrate my ability to architect, build, and scale complex AI products from concept to production.
 
 % --- Body Paragraph 3: Research and Community Engagement ---
 Beyond engineering, I maintain a strong research orientation. I am a \textbf{published author} (arXiv 2024: Comparative Study of LSTM and QLSTM for Stock Market Prediction) and hold professional certifications from \textbf{Meta, IBM, Microsoft Azure, and Stanford/DeepLearning.AI}. I actively contribute to the AI community through technical articles on Medium and insights shared with my \textbf{22,000+ LinkedIn followers}. I have participated in major industry conferences including Future Fest Pakistan and PITB Tech Conferences, staying at the forefront of AI innovation.
 
 % --- Body Paragraph 4: Relocation and Commitment ---
-I am \textbf{fully prepared for immediate relocation} and have proactively researched visa pathways and the professional landscape of target regions. My adaptability, combined with a track record of \textbf{reducing manual workloads by 60--70\%} across multiple enterprise implementations, ensures I will deliver value from day one.
+I am \textbf{fully prepared for immediate relocation} and have proactively researched visa pathways and the professional landscape of target regions. My adaptability, combined with a track record of \textbf{reducing manual workloads by 60–70\%} across multiple enterprise implementations, ensures I will deliver value from day one.
 
 % --- Closing Paragraph ---
-I would welcome the opportunity to discuss how my experience in production RAG, multi-agent orchestration, and scalable AI SaaS aligns with your organization's goals. Thank you for your time and consideration---I look forward to the possibility of contributing to your team.
+I would welcome the opportunity to discuss how my experience in production RAG, multi-agent orchestration, and scalable AI SaaS aligns with your organization's goals. Thank you for your time and consideration—I look forward to the possibility of contributing to your team.
 
 \vspace{1em}
 
@@ -314,8 +359,8 @@ I would welcome the opportunity to discuss how my experience in production RAG, 
 Sincerely,\\[1.5em]
 \textbf{Ibtasam Ahmad}
 
-\end{document}"""
-
+\end{document}
+"""
 
 # Candidate home base — used to decide when relocation language is needed.
 HOME_CITY = "Lahore"
@@ -431,6 +476,7 @@ def init_session_state() -> None:
         "gen_app_mode": "email",
         "gen_work_mode": "Onsite",
         "gen_location": "",
+        "gen_provider": "",
         "gen_model": "llama-3.3-70b-versatile",
         "gen_temp": 0.2,
         "qa_count": 0,
@@ -443,46 +489,119 @@ init_session_state()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  GROQ CLIENT WITH SMART MULTI-KEY FALLBACK
+#  MULTI-PROVIDER LLM CLIENT WITH SMART MULTI-KEY FALLBACK
 # ═════════════════════════════════════════════════════════════════════════════
+#
+#  The active provider is auto-detected from whichever API key is present in
+#  .streamlit/secrets.toml. Groq / OpenAI / OpenRouter / NVIDIA all speak the
+#  OpenAI chat-completions protocol (handled by the `openai` SDK + a base_url),
+#  while Gemini uses `google-generativeai`. Each provider keeps the original
+#  multi-key rotation behavior (rotate only on rate-limit / auth / transient).
 
-class GroqClientManager:
-    """Loads multiple Groq keys and rotates ONLY on rate-limit / auth / connection errors."""
+PROVIDERS: Dict[str, Dict] = {
+    "Groq": {
+        "kind": "openai",
+        "base_url": "https://api.groq.com/openai/v1",
+        "env": ["GROQ_API_KEY"],
+        "models": [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "gemma2-9b-it",
+        ],
+        "supports_json": True,
+    },
+    "OpenAI": {
+        "kind": "openai",
+        "base_url": None,  # default OpenAI endpoint
+        "env": ["OPENAI_API_KEY"],
+        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "o4-mini"],
+        "supports_json": True,
+    },
+    "OpenRouter": {
+        "kind": "openai",
+        "base_url": "https://openrouter.ai/api/v1",
+        "env": ["OPENROUTER_API_KEY"],
+        "models": [
+            "meta-llama/llama-3.3-70b-instruct",
+            "openai/gpt-4o",
+            "google/gemini-2.0-flash-001",
+            "anthropic/claude-3.5-sonnet",
+        ],
+        "supports_json": True,
+    },
+    "NVIDIA": {
+        "kind": "openai",
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "env": ["NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"],
+        "models": [
+            "meta/llama-3.1-70b-instruct",
+            "meta/llama-3.3-70b-instruct",
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+        ],
+        "supports_json": False,  # NIM often rejects response_format; we rely on the prompt
+    },
+    "Gemini": {
+        "kind": "gemini",
+        "base_url": None,
+        "env": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
+        "supports_json": True,
+    },
+}
 
-    def __init__(self):
-        self.keys: List[str] = []
-        self.current_index: int = 0
-        self._load_keys()
 
-    def _load_keys(self) -> None:
-        found: List[str] = []
-        for i in range(1, 20):
-            for prefix in ("GROQ_API_KEY_", "groq_api_key_"):
-                name = f"{prefix}{i}"
+def _load_keys_for(env_names: List[str]) -> List[str]:
+    """Collect all keys for a provider from secrets: NAME, NAME_1..19, NAMES (list/csv)."""
+    found: List[str] = []
+    for base in env_names:
+        for variant in (base, base.lower()):
+            for i in range(1, 20):
+                name = f"{variant}_{i}"
                 if name in st.secrets:
                     found.append(st.secrets[name])
-        for name in ("GROQ_API_KEY", "groq_api_key"):
-            if name in st.secrets:
-                found.append(st.secrets[name])
-        if "GROQ_API_KEYS" in st.secrets:
-            val = st.secrets["GROQ_API_KEYS"]
-            if isinstance(val, list):
-                found.extend(val)
-            elif isinstance(val, str):
-                found.extend([k.strip() for k in val.split(",") if k.strip()])
+            if variant in st.secrets:
+                found.append(st.secrets[variant])
+            plural = f"{variant}S"
+            if plural in st.secrets:
+                val = st.secrets[plural]
+                if isinstance(val, list):
+                    found.extend(val)
+                elif isinstance(val, str):
+                    found.extend([k.strip() for k in val.split(",") if k.strip()])
 
-        seen = set()
-        for k in found:
-            if k and k not in seen:
-                seen.add(k)
-                self.keys.append(k)
+    seen, keys = set(), []
+    for k in found:
+        if k and k not in seen:
+            seen.add(k)
+            keys.append(k)
+    return keys
 
+
+def detect_available_providers() -> List[str]:
+    """Return provider names (in PROVIDERS order) that have at least one key configured."""
+    return [name for name, cfg in PROVIDERS.items() if _load_keys_for(cfg["env"])]
+
+
+class LLMClientManager:
+    """Unified client for any configured provider, with per-provider multi-key failover."""
+
+    def __init__(self, provider: str):
+        if provider not in PROVIDERS:
+            raise ValueError(f"Unknown provider '{provider}'.")
+        self.provider = provider
+        self.cfg = PROVIDERS[provider]
+        self.keys: List[str] = _load_keys_for(self.cfg["env"])
+        self.current_index = 0
         if not self.keys:
-            st.error("No Groq API keys found in `.streamlit/secrets.toml`. Add GROQ_API_KEY_1 = \"gsk_...\".")
+            names = " / ".join(self.cfg["env"])
+            st.error(f"No {provider} API key found in `.streamlit/secrets.toml`. Add {names} = \"...\".")
             st.stop()
 
-    def _client(self) -> Groq:
-        return Groq(api_key=self.keys[self.current_index])
+    @property
+    def _key(self) -> str:
+        return self.keys[self.current_index]
 
     def _rotate(self) -> None:
         self.current_index = (self.current_index + 1) % len(self.keys)
@@ -494,43 +613,126 @@ class GroqClientManager:
         if status in (401, 403, 429, 500, 502, 503):
             return True
         name = type(err).__name__.lower()
-        if any(t in name for t in ("ratelimit", "authentication", "permission", "connection", "apitimeout", "internalserver")):
+        if any(t in name for t in ("ratelimit", "authentication", "permission", "connection",
+                                    "apitimeout", "internalserver", "resourceexhausted", "unauthenticated")):
             return True
         text = str(err).lower()
-        return any(t in text for t in ("rate limit", "429", "quota", "invalid api key", "unauthorized"))
+        return any(t in text for t in ("rate limit", "429", "quota", "invalid api key",
+                                       "unauthorized", "resource_exhausted"))
 
-    def call(
-        self,
-        messages: List[Dict[str, str]],
-        model: str = "llama-3.3-70b-versatile",
-        temperature: float = 0.3,
-        # max_tokens: int = 8000,
-        response_format: Optional[Dict] = None,
-    ) -> str:
+    # ── Provider back-ends ─────────────────────────────────────────────────────
+    #  Each returns (content, truncated) where `truncated` means the model hit its
+    #  output-token cap (finish_reason == length) and the text is likely incomplete.
+    def _call_openai(self, messages, model, temperature, want_json):
+        try:
+            from openai import OpenAI
+        except ImportError:
+            st.error("`openai` package not installed. Run: pip install openai")
+            st.stop()
+        client = OpenAI(api_key=self._key, base_url=self.cfg["base_url"])
+        kwargs = {"model": model, "messages": messages, "temperature": temperature}
+        if want_json and self.cfg["supports_json"]:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = client.chat.completions.create(**kwargs)
+        choice = resp.choices[0]
+        return (choice.message.content or ""), (choice.finish_reason == "length")
+
+    def _call_gemini(self, messages, model, temperature, want_json):
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            st.error("`google-generativeai` package not installed. Run: pip install google-generativeai")
+            st.stop()
+        genai.configure(api_key=self._key)
+        # Fold our (mostly single-user) message format into system + prompt.
+        system = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
+        prompt = "\n\n".join(
+            (f"[assistant so far]\n{m['content']}" if m.get("role") == "assistant" else m["content"])
+            for m in messages if m.get("role") != "system"
+        )
+        gen_cfg = {"temperature": temperature}
+        if want_json and self.cfg["supports_json"]:
+            gen_cfg["response_mime_type"] = "application/json"
+        gmodel = genai.GenerativeModel(model, system_instruction=system or None)
+        resp = gmodel.generate_content(prompt, generation_config=gen_cfg)
+        truncated = False
+        try:  # finish_reason 2 == MAX_TOKENS in the Gemini SDK
+            fr = resp.candidates[0].finish_reason
+            truncated = (int(fr) == 2) or str(fr).upper().endswith("MAX_TOKENS")
+        except Exception:  # noqa: BLE001
+            pass
+        return (resp.text or ""), truncated
+
+    def _dispatch(self, messages, model, temperature, want_json):
+        """One logical completion with per-key failover. Returns (content, truncated)."""
         attempts = 0
         last_error = None
         while attempts < len(self.keys):
             try:
-                kwargs = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    # "max_tokens": max_tokens,
-                }
-                if response_format:
-                    kwargs["response_format"] = response_format
-                resp = self._client().chat.completions.create(**kwargs)
-                return resp.choices[0].message.content
+                if self.cfg["kind"] == "gemini":
+                    return self._call_gemini(messages, model, temperature, want_json)
+                return self._call_openai(messages, model, temperature, want_json)
             except Exception as e:  # noqa: BLE001
                 last_error = e
                 if self._should_rotate(e) and len(self.keys) > 1:
                     attempts += 1
                     self._rotate()
-                    st.sidebar.warning(f"⚠️ Key rotated ({attempts}/{len(self.keys)}): {str(e)[:70]}")
+                    st.sidebar.warning(f"⚠️ {self.provider} key rotated ({attempts}/{len(self.keys)}): {str(e)[:70]}")
                     continue
                 # Non-transient error (bad prompt, model gone, JSON, etc.) — don't burn keys.
                 raise
-        raise RuntimeError(f"All {len(self.keys)} Groq keys failed. Last error: {last_error}")
+        raise RuntimeError(f"All {len(self.keys)} {self.provider} keys failed. Last error: {last_error}")
+
+    def call(
+        self,
+        messages: List[Dict[str, str]],
+        model: str,
+        temperature: float = 0.3,
+        response_format: Optional[Dict] = None,
+        max_continues: int = 4,
+    ) -> str:
+        want_json = bool(response_format) and response_format.get("type") == "json_object"
+        content, truncated = self._dispatch(messages, model, temperature, want_json)
+
+        # Small JSON payloads: don't auto-continue (stitching partial JSON is fragile);
+        # just strip any ```json fences a model may have added.
+        if want_json:
+            return _strip_json_fences(content)
+
+        # Long LaTeX docs: if the model was cut off at its token cap, keep asking it to
+        # continue EXACTLY where it left off until the document is complete.
+        full = content
+        convo = list(messages)
+        rounds = 0
+        while truncated and rounds < max_continues and "\\end{document}" not in full:
+            rounds += 1
+            st.sidebar.info(f"↩️ Output truncated — auto-continuing ({rounds}/{max_continues})…")
+            convo = convo + [
+                {"role": "assistant", "content": content},
+                {"role": "user", "content": CONTINUATION_INSTRUCTION},
+            ]
+            content, truncated = self._dispatch(convo, model, temperature, want_json)
+            full += content
+        return full
+
+
+CONTINUATION_INSTRUCTION = (
+    "You were generating a LaTeX document and were cut off mid-output. "
+    "Continue EXACTLY from where you left off — output ONLY the continuation, "
+    "with NO explanations and NO repetition of already-generated content. "
+    "Do not restart the document. The document must end with \\end{document}, "
+    "and if you already finished the LaTeX, continue with the "
+    f"'{CHANGE_MARKER}' section and its bullet points."
+)
+
+
+def _strip_json_fences(text: str) -> str:
+    """Remove ```json ... ``` fences a model may wrap around a JSON payload."""
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```(?:json)?\s*", "", t)
+        t = re.sub(r"\s*```$", "", t)
+    return t.strip()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -673,6 +875,11 @@ def resume_prompt(job_text, job_title, work_mode, job_location, directive) -> st
 
 GOAL: Produce a HIGHLY TAILORED, ATS-optimized LaTeX resume for THIS job, staying 100% truthful.
 
+RECRUITER AUDIT FIRST (do this silently before writing):
+- Act like a senior AI/ML recruiter reviewing the base resume against THIS JD. Pinpoint the weak
+  spots — missing JD keywords, vague language, weak/absent metrics, misaligned focus — then FIX
+  every one of them in the tailored output below.
+
 TRUTH RULES (non-negotiable):
 - Use ONLY employers, dates, projects, metrics, degrees, and skills present in the base resume.
 - NEVER invent employers, numbers, titles, or projects. You may rephrase, reorder, re-emphasize.
@@ -681,11 +888,15 @@ TAILORING INSTRUCTIONS:
 1. Keep the EXACT LaTeX preamble, packages, and document structure so it compiles unchanged.
 2. Rewrite the header tagline (line under the name) to reflect this job's focus (see directive for relocation part).
 3. Rewrite the Professional Summary to hit the job's top 3-4 requirements using the JD's own terminology.
-4. Reorder the Core Technologies rows and the items inside each row so JD-relevant skills come FIRST.
-5. Reorder Projects so the most JD-relevant come first; rewrite their one-line descriptions to mirror JD keywords and outcomes.
-6. Rewrite experience bullets with strong action verbs + quantified results, emphasizing JD-matching work.
-7. Keep Education, Publications, and Certifications intact; de-emphasize clearly irrelevant content.
-8. Inject the JD's important keywords naturally for ATS. Keep all real hyperlinks/contact info.
+4. End the Professional Summary with a bold, memorable ONE-LINE elevator pitch wrapped in \\textbf{{...}}
+   that captures the candidate's unique value for THIS specific role.
+5. Reorder the Core Technologies rows and the items inside each row so JD-relevant skills come FIRST.
+6. Reorder Projects so the most JD-relevant come first; rewrite their one-line descriptions to mirror JD keywords and outcomes.
+7. Rewrite experience bullets with strong action verbs + quantified results, emphasizing JD-matching work.
+8. If any employment gaps or role transitions are visible, frame them confidently as deliberate growth
+   (upskilling, research, focused specialization) — never apologetic, never invented.
+9. Keep Education, Publications, and Certifications intact; de-emphasize clearly irrelevant content.
+10. Inject the JD's important keywords naturally for ATS. Keep all real hyperlinks/contact info.
 
 LOCATION & WORK-ARRANGEMENT DIRECTIVE (apply to header tagline, summary, and 'Languages & Relocation'):
 {directive}
@@ -716,15 +927,20 @@ def cover_letter_prompt(job_text, job_title, company, work_mode, job_location, d
 
 GOAL: A compelling, tailored LaTeX cover letter for THIS job, 100% truthful to the base letter/resume facts.
 
+RECRUITER AUDIT FIRST (silently): read the base letter against the JD and identify where it feels
+generic, weak, or misaligned — then fix those spots in the tailored letter below.
+
 TRUTH RULES: Use only real experience/projects from the base letter. Never invent facts or numbers.
 
 TAILORING INSTRUCTIONS:
 1. Keep the EXACT LaTeX structure so it compiles unchanged.
 2. Subject line: use the exact job title "{job_title}"{f' at {company}' if company else ''}.
-3. Opening: an attention-grabbing hook specific to this role/company.
-4. Body: address the JD's top 3 requirements with concrete proof (pick the 2-3 MOST relevant projects and describe them with JD keywords).
-5. If a company name is present in the JD, address it specifically; otherwise keep "your organization".
-6. Keep all hyperlinks/contact info. Output valid, compilable LaTeX.
+3. Opening: an attention-grabbing hook specific to this role/company that lands in the first sentence.
+4. Body: address the JD's top 3 requirements with concrete proof (pick the 2-3 MOST relevant projects and describe them with JD keywords). Every claim backed by a real project/metric.
+5. If any concern is implied (relocation, a gap, a transition), reframe it confidently as growth or strength — never apologetic.
+6. If a company name is present in the JD, address it specifically; otherwise keep "your organization".
+7. Close with a bold, memorable ONE-LINE elevator pitch (wrapped in \\textbf{{...}}) embedded in the final paragraph.
+8. Keep all hyperlinks/contact info. Output valid, compilable LaTeX.
 
 LOCATION & WORK-ARRANGEMENT DIRECTIVE (apply to the opening + relocation paragraph):
 {directive}
@@ -768,7 +984,9 @@ RULES:
 2. Body: 3-4 tight paragraphs, under ~180 words, tailored to THIS JD's top needs.
 3. MUST include the sentence: "Please find attached my tailored resume and cover letter as PDFs."
 4. Lead with the single most relevant achievement/metric for THIS job (truthful, from the profile).
-5. Close with a clear CTA (e.g. a short call this week). Do not invent facts.
+5. Reframe any location/availability point as proactive readiness, not a burden (follow the directive).
+6. Close with a clear CTA (e.g. a short call this week). Do not invent facts.
+7. In the signature area, add a single bold/memorable ONE-LINE elevator pitch beneath the name.
 
 JOB DESCRIPTION:
 ```
@@ -803,10 +1021,12 @@ RULES:
 2. "Key skills": order to match the JD, leading with skills the JD names.
 3. Salary fields: "Negotiable / open to discussion" — never invent a number.
 4. Open-ended questions: 2-4 sentence answers referencing REAL projects/metrics from the profile, with JD keywords.
-5. "Why this role/company?": connect JD requirements to real experience.
-6. Availability: "Immediate". Portfolio: provide GitHub + LinkedIn.
-7. Never fabricate projects, numbers, or experience. Detected job title: "{job_title}".
-8. If no explicit questions exist, generate the most common application questions for this JD and answer them.
+5. "Why this role/company?": connect JD requirements to real experience, and END that answer with a crisp,
+   memorable ONE-LINE elevator pitch.
+6. If any gap or transition surfaces, reframe it as deliberate growth or strength — never apologetic or invented.
+7. Availability: "Immediate". Portfolio: provide GitHub + LinkedIn.
+8. Never fabricate projects, numbers, or experience. Detected job title: "{job_title}".
+9. If no explicit questions exist, generate the most common application questions for this JD and answer them.
 
 JOB PORTAL PAGE TEXT:
 ```
@@ -850,20 +1070,21 @@ def extract_company(job_text: str) -> str:
 #  GENERATION  (produces DRAFT — no PDF yet)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def generate_all(job_text, app_mode, work_mode, job_location, model, temperature) -> bool:
+def generate_all(job_text, app_mode, work_mode, job_location, provider, model, temperature) -> bool:
     """Run the AI tailoring. Stores draft + change summary and moves to the review stage."""
     # remember inputs so "Regenerate" can reuse them
     st.session_state.gen_job_text = job_text
     st.session_state.gen_app_mode = app_mode
     st.session_state.gen_work_mode = work_mode
     st.session_state.gen_location = job_location
+    st.session_state.gen_provider = provider
     st.session_state.gen_model = model
     st.session_state.gen_temp = temperature
 
     try:
-        groq = GroqClientManager()
+        llm = LLMClientManager(provider)
     except Exception as e:  # noqa: BLE001
-        st.error(f"Failed to initialize Groq client: {e}")
+        st.error(f"Failed to initialize {provider} client: {e}")
         return False
 
     job_title = extract_job_title(job_text)
@@ -876,7 +1097,7 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
 
     # 1) Resume
     try:
-        raw = groq.call(
+        raw = llm.call(
             [{"role": "user", "content": resume_prompt(job_text, job_title, work_mode, job_location, directive)}],
             model=model, temperature=temperature, 
             # max_tokens=8000,
@@ -890,7 +1111,7 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
 
     # 2) Cover letter
     try:
-        raw = groq.call(
+        raw = llm.call(
             [{"role": "user", "content": cover_letter_prompt(job_text, job_title, company, work_mode, job_location, directive)}],
             model=model, temperature=temperature, 
             # max_tokens=6000,
@@ -905,7 +1126,7 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
     # 3) Mode-specific
     if app_mode == "email":
         try:
-            raw = groq.call(
+            raw = llm.call(
                 [{"role": "user", "content": email_prompt(job_text, job_title, company, directive, PERSONAL_DETAILS)}],
                 model=model, temperature=temperature, 
                 # max_tokens=1500,
@@ -921,7 +1142,7 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
             draft["email_body"] = "Dear Hiring Manager,\n\nPlease find attached my tailored resume and cover letter as PDFs.\n\nBest regards,\nIbtasam Ahmad"
     else:
         try:
-            raw = groq.call(
+            raw = llm.call(
                 [{"role": "user", "content": portal_qa_prompt(job_text, job_title, directive, PERSONAL_DETAILS)}],
                 model=model, temperature=min(temperature, 0.2), 
                 # max_tokens=6000,
@@ -951,6 +1172,7 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
     st.session_state.draft = draft
     st.session_state.changes = changes
     st.session_state.final = {}
+    st.session_state.pop("preview", None)  # a fresh draft invalidates any old PDF preview
     st.session_state.stage = "review"
     return True
 
@@ -959,22 +1181,48 @@ def generate_all(job_text, app_mode, work_mode, job_location, model, temperature
 #  UI PIECES
 # ═════════════════════════════════════════════════════════════════════════════
 
-def render_sidebar() -> Tuple[str, float]:
+def render_sidebar() -> Tuple[str, str, float]:
     with st.sidebar:
         st.title("⚙️ Settings")
         st.markdown("---")
-        model = st.selectbox(
-            "Groq Model",
-            [
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant",
-                "openai/gpt-oss-120b",
-                "openai/gpt-oss-20b",
-                "gemma2-9b-it",
-            ],
-            index=0,
-            help="70B is best for tailoring quality. 8B/gemma are faster/cheaper.",
+
+        available = detect_available_providers()
+        if not available:
+            st.error(
+                "No provider API key found in `.streamlit/secrets.toml`.\n\n"
+                "Add a key for any of: **Groq, OpenAI, OpenRouter, NVIDIA, Gemini** — "
+                "e.g. `OPENAI_API_KEY = \"sk-...\"` or `GROQ_API_KEY_1 = \"gsk_...\"`."
+            )
+            st.stop()
+
+        # Default to the previously-used provider if it is still available.
+        prev = st.session_state.get("gen_provider", "")
+        default_idx = available.index(prev) if prev in available else 0
+        provider = st.selectbox(
+            "Provider (auto-detected from your keys)",
+            available,
+            index=default_idx,
+            help="Only providers with a key in secrets.toml are shown.",
         )
+
+        model_options = list(PROVIDERS[provider]["models"]) + ["✏️ Custom model…"]
+        choice = st.selectbox(
+            f"{provider} Model",
+            model_options,
+            index=0,
+            help="Pick a preset model, or choose Custom to type any model id the provider supports.",
+        )
+        if choice == "✏️ Custom model…":
+            model = st.text_input(
+                "Custom model id",
+                value=st.session_state.get("gen_model", ""),
+                placeholder="e.g. gpt-4.1  ·  meta-llama/llama-3.3-70b-instruct  ·  gemini-2.0-flash",
+            ).strip()
+            if not model:
+                st.info("Enter a custom model id to continue.")
+        else:
+            model = choice
+
         temperature = st.slider(
             "Creativity (temperature)", 0.0, 1.0, 0.2, 0.1,
             help="Lower = more factual & conservative. Higher = more creative wording.",
@@ -993,10 +1241,10 @@ def render_sidebar() -> Tuple[str, float]:
             "3. **Generate** → review & edit\n"
             "4. **Approve** → download PDFs"
         )
-    return model, temperature
+    return provider, model, temperature
 
 
-def render_input(model: str, temperature: float) -> None:
+def render_input(provider: str, model: str, temperature: float) -> None:
     st.markdown("### 1 · Application setup")
     c1, c2, c3 = st.columns([1.1, 1, 1.2])
     with c1:
@@ -1036,8 +1284,11 @@ def render_input(model: str, temperature: float) -> None:
         if not job_text.strip():
             st.error("Please paste the job text first.")
             return
+        if not model:
+            st.error("Please choose or enter a model in the sidebar first.")
+            return
         with st.spinner("🚀 Tailoring resume, cover letter & application… (~20-60s)"):
-            ok = generate_all(job_text, app_mode, work_mode, job_location, model, temperature)
+            ok = generate_all(job_text, app_mode, work_mode, job_location, provider, model, temperature)
         if ok:
             st.rerun()
 
@@ -1067,6 +1318,35 @@ def render_changes() -> None:
     for b in all_bullets:
         st.markdown(f"- {b}")
     st.markdown("</div>", unsafe_allow_html=True)
+
+
+def embed_pdf(pdf_bytes: bytes, height: int = 560) -> None:
+    """Render a compiled PDF inline so the user can visually check it before downloading."""
+    b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+    components.html(
+        f'<iframe src="data:application/pdf;base64,{b64}" width="100%" height="{height}" '
+        f'style="border:1px solid #d0d0d0;border-radius:8px;"></iframe>',
+        height=height + 12,
+    )
+
+
+def _render_preview_block() -> None:
+    """Show the on-demand review-stage PDF preview stored in session_state (if any)."""
+    preview = st.session_state.get("preview")
+    if not preview:
+        return
+    st.caption("🔍 Preview of your current edits — recompile after further edits to refresh.")
+    pc1, pc2 = st.columns(2)
+    for col, kind, title in ((pc1, "resume", "📄 Resume"), (pc2, "cover", "✉️ Cover letter")):
+        with col:
+            st.markdown(f"**{title}**")
+            pdf, log = preview.get(kind, (None, ""))
+            if pdf:
+                embed_pdf(pdf, 520)
+            elif log == "pdflatex-not-found":
+                _pdflatex_help()
+            else:
+                st.warning(f"Preview failed: {log}")
 
 
 def render_review() -> None:
@@ -1113,6 +1393,15 @@ def render_review() -> None:
         if st.button("🆕 Start over", use_container_width=True):
             st.session_state.pending_action = "reset"
             st.rerun()
+
+    if st.button("🔍 Compile & preview PDFs", use_container_width=False,
+                 help="Render your current edited LaTeX to check the actual pages before downloading."):
+        with st.spinner("Compiling preview…"):
+            st.session_state.preview = {
+                "resume": compile_latex_to_pdf(st.session_state.get("edit_resume_tex", ""), "preview_resume"),
+                "cover": compile_latex_to_pdf(st.session_state.get("edit_cover_tex", ""), "preview_cover"),
+            }
+    _render_preview_block()
 
     if approve:
         _approve_and_build(app_mode)
@@ -1221,6 +1510,7 @@ def _pdf_or_source(kind: str, f: Dict, job: str) -> None:
     safe_job = re.sub(r"[^A-Za-z0-9]+", "_", job).strip("_")[:40] or "Application"
     nice = "Resume" if kind == "resume" else "Cover_Letter"
     if pdf:
+        embed_pdf(pdf, 520)
         st.download_button(
             f"⬇️ Download {nice} PDF", data=pdf,
             file_name=f"Ibtasam_Ahmad_{nice}_{safe_job}.pdf",
@@ -1245,7 +1535,7 @@ def _pdf_or_source(kind: str, f: Dict, job: str) -> None:
 def _reset_state() -> None:
     for k in list(st.session_state.keys()):
         if k.startswith(("edit_", "gen_")) or k in (
-            "draft", "final", "changes", "job_title", "qa_count", "stage"):
+            "draft", "final", "changes", "job_title", "qa_count", "stage", "preview"):
             del st.session_state[k]
     init_session_state()
 
@@ -1262,6 +1552,7 @@ def process_pending_actions() -> None:
                 st.session_state.gen_app_mode,
                 st.session_state.gen_work_mode,
                 st.session_state.gen_location,
+                st.session_state.gen_provider,
                 st.session_state.gen_model,
                 st.session_state.gen_temp,
             )
@@ -1269,7 +1560,7 @@ def process_pending_actions() -> None:
 
 def main() -> None:
     process_pending_actions()
-    model, temperature = render_sidebar()
+    provider, model, temperature = render_sidebar()
 
     st.markdown(
         "<div class='hero'><h1>📄 AI Resume Tailor & Application Assistant</h1>"
@@ -1280,14 +1571,14 @@ def main() -> None:
 
     stage = st.session_state.stage
     if stage == "input":
-        render_input(model, temperature)
+        render_input(provider, model, temperature)
     elif stage == "review":
         render_review()
     elif stage == "done":
         render_done()
 
     st.markdown("---")
-    st.caption("Built by Ibtasam Ahmad · Powered by Groq")
+    st.caption(f"Built by Ibtasam Ahmad · Powered by {provider}")
 
 
 if __name__ == "__main__":
