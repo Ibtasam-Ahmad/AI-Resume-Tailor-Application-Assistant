@@ -1321,13 +1321,40 @@ def render_changes() -> None:
 
 
 def embed_pdf(pdf_bytes: bytes, height: int = 560) -> None:
-    """Render a compiled PDF inline so the user can visually check it before downloading."""
-    b64 = base64.b64encode(pdf_bytes).decode("utf-8")
-    components.html(
-        f'<iframe src="data:application/pdf;base64,{b64}" width="100%" height="{height}" '
-        f'style="border:1px solid #d0d0d0;border-radius:8px;"></iframe>',
-        height=height + 12,
-    )
+    """Render a compiled PDF inline so the user can visually check it before downloading.
+
+    Chrome blocks `data:` URLs loaded inside an iframe, so we build a same-origin
+    Blob URL in JS (not blocked) and point the viewer iframe at that instead.
+    """
+    b64 = base64.b64encode(pdf_bytes).decode("utf-8")  # base64 is quote/backslash-free -> safe to inline
+    html = f"""
+    <div id="pdfbox" style="width:100%;">
+      <p id="pdffallback" style="font-family:sans-serif;color:#888;">Loading PDF preview…</p>
+    </div>
+    <script>
+      (function() {{
+        try {{
+          const bin = atob("{b64}");
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const url = URL.createObjectURL(new Blob([bytes], {{type: "application/pdf"}}));
+          const frame = document.createElement("iframe");
+          frame.src = url;
+          frame.style.width = "100%";
+          frame.style.height = "{height}px";
+          frame.style.border = "1px solid #d0d0d0";
+          frame.style.borderRadius = "8px";
+          const box = document.getElementById("pdfbox");
+          box.innerHTML = "";
+          box.appendChild(frame);
+        }} catch (e) {{
+          document.getElementById("pdffallback").textContent =
+            "Inline preview unavailable in this browser — please use the download button.";
+        }}
+      }})();
+    </script>
+    """
+    components.html(html, height=height + 16)
 
 
 def _render_preview_block() -> None:
