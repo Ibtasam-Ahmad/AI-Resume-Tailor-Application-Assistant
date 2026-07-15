@@ -1358,22 +1358,36 @@ def embed_pdf(pdf_bytes: bytes, height: int = 560) -> None:
 
 
 def _render_preview_block() -> None:
-    """Show the on-demand review-stage PDF preview stored in session_state (if any)."""
+    """Show the on-demand review-stage PDF preview stored in session_state (if any).
+
+    The compiled PDF is always offered as a DOWNLOAD (reliable everywhere). Inline
+    rendering is opt-in, since some browsers (Chrome/Edge) block PDFs inside iframes.
+    """
     preview = st.session_state.get("preview")
     if not preview:
         return
-    st.caption("🔍 Preview of your current edits — recompile after further edits to refresh.")
+    st.caption("🔍 Compiled from your current edits — **download to inspect**, fix the LaTeX if "
+               "needed, then recompile. Inline preview is optional (some browsers block it).")
+    show_inline = st.checkbox("Also show inline preview (may be blocked by your browser)",
+                              value=False, key="show_inline_preview")
     pc1, pc2 = st.columns(2)
-    for col, kind, title in ((pc1, "resume", "📄 Resume"), (pc2, "cover", "✉️ Cover letter")):
+    for col, kind, title, fname in ((pc1, "resume", "📄 Resume", "Resume"),
+                                    (pc2, "cover", "✉️ Cover letter", "Cover_Letter")):
         with col:
             st.markdown(f"**{title}**")
             pdf, log = preview.get(kind, (None, ""))
             if pdf:
-                embed_pdf(pdf, 520)
+                st.download_button(
+                    f"⬇️ Download {fname} PDF", data=pdf,
+                    file_name=f"Ibtasam_Ahmad_{fname}_preview.pdf",
+                    mime="application/pdf", use_container_width=True, key=f"dl_preview_{kind}",
+                )
+                if show_inline:
+                    embed_pdf(pdf, 520)
             elif log == "pdflatex-not-found":
                 _pdflatex_help()
             else:
-                st.warning(f"Preview failed: {log}")
+                st.warning(f"Compile failed — {log}")
 
 
 def render_review() -> None:
@@ -1537,12 +1551,13 @@ def _pdf_or_source(kind: str, f: Dict, job: str) -> None:
     safe_job = re.sub(r"[^A-Za-z0-9]+", "_", job).strip("_")[:40] or "Application"
     nice = "Resume" if kind == "resume" else "Cover_Letter"
     if pdf:
-        embed_pdf(pdf, 520)
         st.download_button(
             f"⬇️ Download {nice} PDF", data=pdf,
             file_name=f"Ibtasam_Ahmad_{nice}_{safe_job}.pdf",
             mime="application/pdf", use_container_width=True, key=f"dl_{kind}_pdf",
         )
+        if st.checkbox("👁️ Show inline preview (optional)", value=False, key=f"prev_{kind}"):
+            embed_pdf(pdf, 520)
     else:
         if log == "pdflatex-not-found":
             _pdflatex_help()
